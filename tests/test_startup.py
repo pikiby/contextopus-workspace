@@ -10,7 +10,6 @@ import shlex
 import shutil
 import subprocess
 import sys
-import sysconfig
 import tempfile
 import unittest
 import venv
@@ -72,6 +71,14 @@ class StartupTests(unittest.TestCase):
         command = ["/bin/sh", str(self.plugin / "scripts" / "launch.sh"), *arguments]
         return subprocess.run(command, env=environment, cwd=self.project, input=input,
                               text=True, capture_output=True, timeout=15)
+
+    def user_site(self, userbase):
+        # Framework builds on macOS do not use the posix_user layout.
+        return Path(subprocess.check_output(
+            [sys.executable, "-E", "-P", "-B", "-c",
+             "import site; print(site.getusersitepackages())"],
+            env={**self.environment, "PYTHONUSERBASE": str(userbase)}, text=True,
+        ).strip())
 
     def distribution(self, name, module, version, *, body="raise RuntimeError('UNEXPECTED_DEPENDENCY_IMPORT')\n"):
         self.packages.mkdir(exist_ok=True)
@@ -190,7 +197,7 @@ class StartupTests(unittest.TestCase):
     def test_normal_user_site_packages_are_reused_and_explicit_restriction_is_respected(self):
         self.base()
         userbase = self.root / "existing user installation"
-        user_site = Path(sysconfig.get_path("purelib", scheme="posix_user", vars={"userbase": str(userbase)}))
+        user_site = self.user_site(userbase)
         user_site.parent.mkdir(parents=True)
         shutil.move(str(self.packages), str(user_site))
         environment = {**self.environment, "PCW_PYTHON": sys.executable, "PYTHONUSERBASE": str(userbase)}
@@ -225,7 +232,7 @@ class StartupTests(unittest.TestCase):
     def test_selected_existing_venv_keeps_its_user_site_disabled(self):
         self.base()
         userbase = self.root / "existing user installation"
-        user_site = Path(sysconfig.get_path("purelib", scheme="posix_user", vars={"userbase": str(userbase)}))
+        user_site = self.user_site(userbase)
         user_site.parent.mkdir(parents=True)
         shutil.move(str(self.packages), str(user_site))
         # This is a disposable test fixture; the launcher never creates a venv.

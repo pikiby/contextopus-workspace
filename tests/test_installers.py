@@ -62,6 +62,17 @@ def test_missing_core_is_actionable_and_checkout_is_not_installed(installer):
 @pytest.mark.skipif(shutil.which('pwsh') is None, reason='Requires PowerShell')
 def test_powershell_forwards_root_and_preview(installer, tmp_path):
     module, record, env = installer
+    # Multiple PATH matches must resolve to the first executable, not an array.
+    fallback = tmp_path / 'another Core installation'
+    fallback.mkdir()
+    other_core = fallback / ('contextopus.cmd' if os.name == 'nt' else 'contextopus')
+    if os.name == 'nt':
+        other_core.write_text('@exit /b 91\r\n')
+    else:
+        other_core.write_text('#!' + sys.executable + '\nraise SystemExit(91)\n')
+        other_core.chmod(0o755)
+    first, *remaining = env['PATH'].split(os.pathsep)
+    env = dict(env, PATH=os.pathsep.join([first, str(fallback), *remaining]))
     root = tmp_path / 'data root'
     subprocess.run([shutil.which('pwsh'), '-NoProfile', '-File', str(module / 'install.ps1'),
                     '-Root', str(root), '-Plan'], env=env, check=True)

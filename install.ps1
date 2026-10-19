@@ -2,7 +2,7 @@
 [CmdletBinding()]
 param([string]$Root, [switch]$Plan)
 $ErrorActionPreference = 'Stop'
-$core = Get-Command contextopus -CommandType Application -ErrorAction SilentlyContinue
+$core = Get-Command contextopus -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
 if (-not $core) {
     [Console]::Error.WriteLine('Install Contextopus Core >=1.5,<2 first: https://github.com/pikiby/contextopus-core#install-contextopus')
     exit 127
