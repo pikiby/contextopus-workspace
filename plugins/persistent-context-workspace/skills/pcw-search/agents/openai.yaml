@@ -1,0 +1,6 @@
+interface:
+  display_name: "pcw-search"
+  short_description: "Read selected project context without starting work"
+  default_prompt: "Use $pcw-search for my selected project context."
+policy:
+  allow_implicit_invocation: true

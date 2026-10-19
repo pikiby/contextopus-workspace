@@ -1,0 +1,134 @@
+{
+  "version": "1.5.0",
+  "documents": [
+    {
+      "key": "installed-version",
+      "file": "installed-version.md",
+      "type": "reference",
+      "description": "Explains how to inspect the installed documentation version, preview managed updates and preserve user changes.",
+      "links": [
+        "contextopus-guide",
+        "retrieval-guide",
+        "workspace-guide",
+        "evidence-guide",
+        "integrations-guide",
+        "module-guide",
+        "algorithm-guide",
+        "rules-template"
+      ]
+    },
+    {
+      "key": "workspace-guide",
+      "file": "workspace-guide.md",
+      "type": "guide",
+      "description": "Explains updating typed project records, reviewing proposals, sharing optional temporary assignments and finishing work under independent cleanup policy.",
+      "links": [
+        "contextopus-guide",
+        "retrieval-guide",
+        "evidence-guide",
+        "rules-template"
+      ]
+    },
+    {
+      "key": "module-guide",
+      "file": "module-guide.md",
+      "type": "guide",
+      "description": "Explains one-action module installation, packaged SQL migrations, shared Core storage, handler protocols and verified lifecycle recovery.",
+      "links": [
+        "contextopus-guide",
+        "module-template",
+        "algorithm-guide",
+        "integrations-guide"
+      ]
+    },
+    {
+      "key": "algorithm-guide",
+      "file": "algorithm-guide.md",
+      "type": "guide",
+      "description": "Explains choosing and tuning shared retrieval selection, diagnostic limits and the contract for authoring deterministic algorithms.",
+      "links": [
+        "contextopus-guide",
+        "algorithm-template",
+        "retrieval-guide",
+        "evidence-guide"
+      ]
+    },
+    {
+      "key": "module-template",
+      "file": "module-template.md",
+      "type": "template",
+      "description": "Provides the authoring checklist for module packages, schema compatibility, Core storage handlers and actual Application validation.",
+      "links": [
+        "module-guide"
+      ]
+    },
+    {
+      "key": "algorithm-template",
+      "file": "algorithm-template.md",
+      "type": "template",
+      "description": "Provides an algorithm descriptor and implementation scaffold for deterministic selection over ranked candidates with declared parameters and boundaries.",
+      "links": [
+        "algorithm-guide"
+      ]
+    },
+    {
+      "key": "rules-template",
+      "file": "rules-template.md",
+      "type": "template",
+      "description": "Provides a checklist for authoring complete context rules and separately reviewing effective machine settings without changing unrelated rules.",
+      "links": [
+        "workspace-guide"
+      ]
+    },
+    {
+      "key": "contextopus-guide",
+      "file": "contextopus-guide.md",
+      "type": "guide",
+      "description": "Explains shared Core memory, separate context rules and the main retrieval, work, evidence, integration and extension scenarios.",
+      "links": [
+        "installed-version",
+        "retrieval-guide",
+        "workspace-guide",
+        "evidence-guide",
+        "integrations-guide",
+        "module-guide",
+        "algorithm-guide"
+      ]
+    },
+    {
+      "key": "retrieval-guide",
+      "file": "retrieval-guide.md",
+      "type": "guide",
+      "description": "Explains discovering the intended context and answering independent questions from complete records with inherited search settings and bounded cross-context evidence.",
+      "links": [
+        "contextopus-guide",
+        "workspace-guide",
+        "evidence-guide",
+        "algorithm-guide"
+      ]
+    },
+    {
+      "key": "evidence-guide",
+      "file": "evidence-guide.md",
+      "type": "guide",
+      "description": "Explains fresh required-source checks, permanent Git versions, operation analytics and the evidence limits of bounded historical search analysis.",
+      "links": [
+        "contextopus-guide",
+        "retrieval-guide",
+        "workspace-guide",
+        "algorithm-guide"
+      ]
+    },
+    {
+      "key": "integrations-guide",
+      "file": "integrations-guide.md",
+      "type": "guide",
+      "description": "Explains connecting Codex, Claude Code, OpenCode, Crush and Hermes to one local service, validating calls and recovering existing sessions.",
+      "links": [
+        "contextopus-guide",
+        "workspace-guide",
+        "module-guide"
+      ]
+    }
+  ]
+}

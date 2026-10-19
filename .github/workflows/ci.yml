@@ -1,0 +1,70 @@
+name: Workspace validation
+on:
+  workflow_dispatch:
+    inputs:
+      core_repository:
+        description: Repository containing compatible Core >=1.5,<2
+        required: true
+        default: pikiby/contextopus-core
+      core_ref:
+        default: v1.5.0
+        description: Compatible Core tag, commit or branch
+        required: true
+jobs:
+  validate:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ['3.12', '3.13']
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.core_repository }}
+          ref: ${{ inputs.core_ref }}
+          path: .ci/core
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install -e "./.ci/core[test]" build
+      - run: python -m pip install -e ".[test]" --no-deps
+      - run: python scripts/test.py --core .ci/core -- -v --durations=20 -o faulthandler_timeout=120
+      - run: python scripts/build-module.py dist/workspace --archive dist/contextopus-workspace-1.5.0.zip
+      - run: python scripts/verify_installed.py --workspace-module dist/contextopus-workspace-1.5.0.zip
+      - run: python -m build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: workspace-${{ matrix.os }}-py${{ matrix.python }}
+          path: dist/
+  upgrade-1-1-to-current:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.core_repository }}
+          ref: ${{ inputs.core_ref }}
+          path: .ci/core
+      - uses: actions/checkout@v4
+        with:
+          repository: pikiby/contextopus-core
+          ref: ff711966921c562f22aa7bcdb9358a871c8d4282
+          path: .ci/contextopus-v11-source
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e "./.ci/core[test]"
+      - run: python -m pip install -e ".[test]" --no-deps
+      - name: Verify the old writer source identity
+        run: >-
+          python -c "import pathlib,subprocess,tomllib; old=pathlib.Path('.ci/contextopus-v11-source'); assert subprocess.check_output(['git','-C',str(old),'rev-parse','HEAD'],text=True).strip()=='ff711966921c562f22aa7bcdb9358a871c8d4282'; assert tomllib.loads((old/'pyproject.toml').read_text())['project']['version']=='1.1.0'"
+      - run: python -m venv .ci/v11-venv
+      - run: .ci/v11-venv/bin/python -m pip install ./.ci/contextopus-v11-source
+      - name: Create with the pinned real old writer and migrate its copy
+        env:
+          CONTEXTOPUS_V11_PYTHON: ${{ github.workspace }}/.ci/v11-venv/bin/python
+        run: python scripts/test.py --core .ci/core -- -v tests/test_upgrade_11_to_13.py -o faulthandler_timeout=120

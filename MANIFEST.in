@@ -1,0 +1,7 @@
+include module.json LICENSE NOTICE install.sh install.ps1
+recursive-include package *.py *.md *.json *.sql *.yaml
+recursive-include scripts *.py
+recursive-include docs *.md *.svg *.png
+recursive-include tests *.py *.json *.md
+recursive-include plugins/persistent-context-workspace *.py *.json *.toml *.md *.sh *.yaml
+global-exclude __pycache__ *.py[cod]

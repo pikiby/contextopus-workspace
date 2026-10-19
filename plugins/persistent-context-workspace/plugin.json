@@ -1,0 +1,26 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "persistent-context-workspace",
+  "version": "0.14.0",
+  "description": "Project memory with independent reading, task state, configurable updates, history and analytics",
+  "extensions": {
+    "com.openai": {
+      "skills": "./skills/",
+      "interface": {
+        "displayName": "Persistent Context Workspace",
+        "shortDescription": "Persistent external context for long-running work.",
+        "longDescription": "Read project knowledge first, retain work in temporary context and review permanent changes before applying them. Clear temporary context at cycle start and finish.",
+        "developerName": "pikiby",
+        "category": "Productivity",
+        "capabilities": [
+          "Interactive",
+          "Write"
+        ],
+        "defaultPrompt": [
+          "Use $pcw to prepare project knowledge and the current task.",
+          "Use $pcw to continue the task using existing project memory."
+        ]
+      }
+    }
+  }
+}

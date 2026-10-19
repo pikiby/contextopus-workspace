@@ -1,0 +1,6 @@
+interface:
+  display_name: "pcw-analyze"
+  short_description: "Analyze evidence of an agent's PCW usage"
+  default_prompt: "Use $pcw-analyze to assess how the selected agent task used saved context, with evidence and uncertainty."
+policy:
+  allow_implicit_invocation: true

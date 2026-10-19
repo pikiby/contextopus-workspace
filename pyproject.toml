@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "contextopus-workspace"
+version = "1.5.0"
+description = "Optional Contextopus module for persistent project contexts and evidence-backed memory"
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+requires-python = ">=3.12"
+dependencies = ["contextopus-core>=1.5,<2"]
+
+[project.optional-dependencies]
+test = ["pytest>=8", "pytest-asyncio>=0.24"]
+
+[tool.setuptools.packages.find]
+where = ["package"]
+include = ["workspace*"]
+
+[tool.setuptools.package-data]
+workspace = ["*.md", "sql_migrations/*.sql", "resources/**/*.md", "resources/**/*.json", "skills/**/*.md", "skills/**/*.yaml"]
+
+[tool.pytest.ini_options]
+pythonpath = ["package", "tests", "plugins/persistent-context-workspace"]
+testpaths = ["tests"]

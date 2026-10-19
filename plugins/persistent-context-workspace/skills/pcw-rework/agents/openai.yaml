@@ -1,0 +1,6 @@
+interface:
+  display_name: "pcw-rework"
+  short_description: "Restructure selected knowledge under project rules"
+  default_prompt: "Use $pcw-rework for my selected project context."
+policy:
+  allow_implicit_invocation: false

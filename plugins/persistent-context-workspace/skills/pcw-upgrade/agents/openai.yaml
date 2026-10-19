@@ -1,0 +1,6 @@
+interface:
+  display_name: "pcw-upgrade"
+  short_description: "Upgrade selected PCW contexts while preserving data"
+  default_prompt: "Use $pcw-upgrade for my selected project context."
+policy:
+  allow_implicit_invocation: false

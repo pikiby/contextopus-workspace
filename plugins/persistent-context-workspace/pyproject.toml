@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "persistent-context-workspace"
+version = "0.14.0"
+description = "Explicit-cycle project memory and host-independent LanceDB MCP tools"
+requires-python = ">=3.11"
+dependencies = ["lancedb>=0.20,<1", "mcp>=1.10,<2", "PyYAML>=6,<7", "pydantic>=2.11,<3"]
+
+[project.optional-dependencies]
+local = ["sentence-transformers>=3,<6"]
+tokenizers = ["transformers>=4.51,<5", "tiktoken>=0.7,<1"]
+test = ["pytest>=8"]
+
+[project.scripts]
+pcw-runtime = "pcw_runtime.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["pcw_runtime*"]
+
+[tool.setuptools.package-data]
+pcw_runtime = ["default_instructions.md"]
