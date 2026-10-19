@@ -283,8 +283,12 @@ class BaseContext:
                 if proposals:
                     ident, entry = next(iter(proposals.items()))
                     saved = runtime._load_plan(pending['cycle_id'], ident, entry)
-                    proposal = {'proposal_id': ident, 'revision': entry['revision'],
-                                'status': entry['state'], 'created_ids': saved['created_ids']}
+                    if entry['state'] == 'discarded':
+                        proposal = runtime.proposal_prepare(pending['cycle_id'], changes,
+                            proposal_id=ident, summary='Update Contextopus product documentation')
+                    else:
+                        proposal = {'proposal_id': ident, 'revision': entry['revision'],
+                                    'status': entry['state'], 'created_ids': saved['created_ids']}
                 else:
                     proposal = runtime.proposal_prepare(pending['cycle_id'], changes,
                         no_changes_reason='Packaged documents already match' if not changes else None,
@@ -300,6 +304,20 @@ class BaseContext:
             self._write(state)
         if pending['stage'] == 'apply':
             review = runtime.proposal_read(pending['cycle_id'], pending['proposal_id'])
+            if review['state'] == 'prepared':
+                entry = runtime._records()['cycles'][pending['cycle_id']]['proposals'][pending['proposal_id']]
+                saved = runtime._load_plan(pending['cycle_id'], pending['proposal_id'], entry)
+                if 'edit_reservations' in saved:
+                    try:
+                        runtime._edits().validate(pending['cycle_id'], saved['edit_reservations'])
+                    except PCWError as exc:
+                        # Rebuild from the reviewed bundle and current file hashes on
+                        # the next call; never renew ownership of an old proposal.
+                        runtime.proposal_discard(pending['cycle_id'], pending['proposal_id'], review['revision'])
+                        pending['stage'] = 'prepare'
+                        self._write(state)
+                        return {'status': 'needs_review', 'error': str(exc), 'plan_revision': revision,
+                                'next_action': 'core.base_install', 'active_rules_changed': False}
             if review['approval_required'] and (not isinstance(confirmation, str) or not confirmation.strip()):
                 return {'status': 'review_requires_approval', 'plan_revision': revision,
                         'review_changes': review['review_changes'], 'active_rules_changed': False}

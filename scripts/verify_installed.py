@@ -60,7 +60,11 @@ def workspace_smoke(root, module, expected_version):
             raise ValueError('Installed Workspace cleanup default is stale')
         for operation, kind in [('workspace.settings_read', 'query'),
                                 ('workspace.settings_preview', 'execute'),
-                                ('workspace.settings_apply', 'execute')]:
+                                ('workspace.settings_apply', 'execute'),
+                                ('workspace.reserve', 'execute'),
+                                ('workspace.reservations', 'query'),
+                                ('workspace.reservation_renew', 'execute'),
+                                ('workspace.reservation_release', 'execute')]:
             if app.query('describe', {'operation': operation})['kind'] != kind:
                 raise ValueError('Workspace operation registration is incomplete')
         if app.query('workspace.contexts')['total'] != 0:

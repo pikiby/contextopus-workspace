@@ -9,11 +9,20 @@ from workspace.cycles import CycleRuntime
 from workspace.runtime import PCWError
 from workspace.text_io import read_utf8
 from test_runtime import Factory
+from workspace.analytics import EventStore
+
+
+def prepare_module_storage(root):
+    # Direct domain fixtures perform the same explicit schema step as module install.
+    store = EventStore(root)
+    plan = store.storage_prepare()
+    store.storage_apply(plan['revision'])
 
 
 @pytest.fixture
 def base(tmp_path):
     (tmp_path / 'modules/workspace/workspace_contexts').mkdir(parents=True)
+    prepare_module_storage(tmp_path)
     factory = Factory()
     bundle = packaged_bundle()
     bundle['documents'] = [
@@ -32,6 +41,7 @@ def install(service):
 def test_packaged_scenario_upgrade_keeps_existing_ids_and_resolves_navigation(tmp_path):
     """Exercise the real bundle graph, including links to newly shipped topics."""
     (tmp_path / 'modules/workspace/workspace_contexts').mkdir(parents=True)
+    prepare_module_storage(tmp_path)
     bundle = packaged_bundle()
     original_keys = {'installed-version', 'workspace-guide', 'module-guide', 'algorithm-guide',
                      'module-template', 'algorithm-template', 'rules-template'}
@@ -307,8 +317,8 @@ def test_changed_limit_needs_split_preserves_docs(base):
 
 
 def test_partial_apply_retries_same_proposal(base):
-    original = CycleRuntime.proposal_apply
     calls = []
+    original = CycleRuntime.proposal_apply
     def partial(runtime, *args, **kwargs):
         calls.append(args[1])
         if len(calls) == 1:
@@ -475,3 +485,40 @@ def test_default_base_install_closes_and_cleans_without_cleanup_approval(base):
             assert runtime.read(material_id=receipt['id'])['index_status'] == 'indexed'
     finally:
         runtime.close()
+
+
+@pytest.mark.parametrize('user_edit', [False, True])
+def test_expired_managed_proposal_can_be_reprepared(base, monkeypatch, user_edit):
+    install(base)
+    base.bundle['documents'][0]['content'] += '\nUpdated product guidance.\n'
+    plan = base.plan()
+    with monkeypatch.context() as interruption:
+        def interrupted(*args, **kwargs):
+            raise OSError('Simulated pause after preparation')
+        interruption.setattr(CycleRuntime, 'proposal_apply', interrupted)
+        with pytest.raises(OSError, match='Simulated pause'):
+            base.install(plan['plan_revision'])
+    runtime = base.runtime_factory(base.layout.root, plan['context'])
+    try:
+        with runtime.control.storage.connect() as db:
+            db.execute('UPDATE workspace_edit_reservations SET expires_at=0')
+    finally:
+        runtime.close()
+    result = base.install(plan['plan_revision'])
+    assert result['status'] == 'needs_review' and result['next_action'] == 'core.base_install'
+    assert base._read()['pending']['stage'] == 'prepare'
+    if user_edit:
+        runtime = base.runtime_factory(base.layout.root, plan['context'])
+        try:
+            record = runtime.read(material_id=plan['changes'][0]['material_id'])
+            path = runtime.engine.root / record['path']
+            edited = path.read_bytes() + b'\nUser-maintained condition.\n'
+            path.write_bytes(edited)
+            with pytest.raises(PCWError, match='Managed base document changed'):
+                base.install(plan['plan_revision'])
+            assert path.read_bytes() == edited
+        finally:
+            runtime.close()
+    else:
+        assert base.install(plan['plan_revision'])['status'] == 'installed'
+        assert base.plan()['status'] == 'current'

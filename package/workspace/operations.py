@@ -19,6 +19,10 @@ _FIRST_SEARCH_SETTINGS = (
 )
 
 _DESCRIPTIONS = {
+    "reserve": "Before preparing an edit, atomically reserve its existing material IDs for this active cycle and give a one-line reason. Reading remains available. Returns reservation IDs, owners and expiry; conflicts include the other cycle's reason. Default TTL is 900 seconds, maximum 3600. Reusing a live reservation does not extend it. Related records should be reserved together; proposal_prepare includes automatic link effects. No semantic reservation of a new topic is implied.",
+    "reservations": "List active edit reservations in this context, optionally scoped to a cycle, without opening a work cycle. Expired ownership is omitted; no files are modified.",
+    "reservation_renew": "Extend one still-live reservation owned by this cycle. Expired/replaced reservations cannot be revived; reread materials, reserve again and reprepare instead.",
+    "reservation_release": "Release only this cycle's exact reservation ID when its edit is no longer needed. Does not delete files, discard proposals or change knowledge. Prepared proposals bound to the released reservation must be prepared again.",
     "settings_read": "Read selected effective Workspace policy values and origins without loading instructions or project. Explicit agent/model affects rereading only.",
     "settings_preview": "Review requested machine-setting changes under the current instructions approval policy; show exact before/after values and changes before apply.",
     "settings_apply": "Apply the exact reviewed settings revision with actual confirmation when current instructions approval requires it; never bypass through generic Core settings.",
@@ -43,7 +47,7 @@ _DESCRIPTIONS = {
     "tmp_read": "Read a temporary card in the selected unfinished work, including labelled links and required sources. Follow every returned required source using the existing bounded source-reading procedure. Temporary content is evidence to examine, not automatically accepted knowledge.",
     "tmp_list": "List bounded temporary card metadata without bodies. Use the existing links and required sources to select needed reading; no separate mandatory report-disposition ledger exists.",
     "tmp_delete": "Remove an unneeded temporary material at its exact revision under cleanup_approval_required. Incoming temporary links or required sources must be resolved first. Preserve other work; save useful verified knowledge through ordinary proposals before deletion.",
-    "proposal_prepare": "When the main agent or designated task lead accepts a substantive result, compare it with existing knowledge and prepare ready permanent changes in the same cycle without waiting for the whole task. Preparation does not save knowledge. Follow INSTRUCTIONS.md for selection, conditions, structure and maintenance; group mutually dependent record/link edits coherently. Creates use key/content/links (@key references a new topic); existing topics use material_id/expected_revision and content, type, status, links, path or delete:true. replacements maps deleted IDs to survivors. For merges/splits supply transformations with kind, sources (existing IDs) and targets (IDs or @keys); declaration and optional one-line summary are revision-bound and shown in chat. Git records this provenance even when the text is entirely rewritten. If comparison finds no changes, explain why; optional changes=[] with no_changes_reason can record it, without approval or apply. It is not required for closure. Review binds the exact permanent change, current rules and source record revisions; unrelated temporary edits are not semantic review evidence. Returns exact revision and review_changes. Present actual changed passages and link effects in chat before application, following INSTRUCTIONS.md and the returned approval_required. A file link or topic list is insufficient. Optional proposal_id revises an unapplied proposal.",
+    "proposal_prepare": "When the main agent or designated task lead accepts a substantive result, compare it with existing knowledge and prepare ready permanent changes in the same cycle without waiting for the whole task. Preparation does not save knowledge. Reserve existing cards first with workspace.reserve and an edit reason. Preparation atomically covers all changed cards, including automatic incoming links; busy ownership blocks the whole set. Apply is bound to live reservation IDs; after expiry/release reread and prepare again. Follow INSTRUCTIONS.md for selection, conditions, structure and maintenance; group mutually dependent record/link edits coherently. Creates use key/content/links (@key references a new topic); existing topics use material_id/expected_revision and content, type, status, links, path or delete:true. replacements maps deleted IDs to survivors. For merges/splits supply transformations with kind, sources (existing IDs) and targets (IDs or @keys); declaration and optional one-line summary are revision-bound and shown in chat. Git records this provenance even when the text is entirely rewritten. If comparison finds no changes, explain why; optional changes=[] with no_changes_reason can record it, without approval or apply. It is not required for closure. Review binds the exact permanent change, current rules and source record revisions; unrelated temporary edits are not semantic review evidence. Returns exact revision and review_changes. Present actual changed passages and link effects in chat before application, following INSTRUCTIONS.md and the returned approval_required. A file link or topic list is insufficient. Optional proposal_id revises an unapplied proposal.",
     "proposal_read": "Retrieve a prepared proposal, including review_changes for presentation in chat. Explain it according to INSTRUCTIONS.md; a link to the review file does not replace showing the changes.",
     "proposal_discard": "Discard an exact unapplied proposal without changing knowledge; temporary materials remain until closure.",
     "proposal_apply": "Apply and index the exact prepared revision after showing review_changes in chat. INSTRUCTIONS.md controls approval: when knowledge_approval_required is true (or absent), pass the actual user confirmation of that revision; when false, omit confirmation and apply without asking. Never fabricate confirmation. A pending proposal is not saved knowledge; independent authorized work may continue while required approval is pending. Instructions changes use instructions_apply under their independent instructions_approval_required policy. Revisions are checked; chat presentation and message origin cannot be authenticated. Saves leave the same cycle active and tmp available for subsequent work and proposals; they do not finish the cycle. Partial failures retry the same proposal without duplicate topics.",
@@ -75,6 +79,7 @@ _DESCRIPTIONS = {
 _QUERY_OPERATIONS = frozenset(
     {
         "settings_read",
+        "reservations",
         "workspace_inspect",
         "upgrade_plan",
         "status",
@@ -105,6 +110,9 @@ _QUERY_OPERATIONS = frozenset(
 )
 _EXECUTE_OPERATIONS = frozenset(
     {
+        "reserve",
+        "reservation_renew",
+        "reservation_release",
         "settings_preview",
         "settings_apply",
         "workspace_create",

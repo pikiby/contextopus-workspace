@@ -39,6 +39,7 @@ from .analytics import AnalyticsMixin
 from .audit import AuditMixin
 from .temporary_materials import TemporaryMaterialsMixin
 from .context_identity import context_metadata
+from .edit_reservations import ReservationOperations
 
 
 
@@ -93,6 +94,7 @@ def _knowledge_approval_required(content):
 
 
 class CycleRuntime(
+    ReservationOperations,
     TemporaryMaterialsMixin,
     FormatMigrationMixin,
     WorkspaceMixin,
@@ -508,6 +510,8 @@ class CycleRuntime(
             .as_posix(),
             "effects": effects[:50],
             "effects_count": len(effects),
+            **({"reservations": self._edits().rows(list(plan["entries"]))}
+               if plan.get("edit_reservations") else {}),
             "review_changes": self._review_changes(plan),
             "history_summary": plan.get("summary"),
             "transformations": plan.get("transformations", []),
@@ -695,6 +699,8 @@ class CycleRuntime(
             if not changes and (transformations or summary):
                 raise PCWError("A no-change review cannot declare a transformation or commit summary")
             ident = self._proposal_id(cycle_id, cycle, proposal_id, "knowledge")
+            previous_bindings = (self._load_plan(cycle_id, ident, cycle["proposals"][ident]).get("edit_reservations", {})
+                                 if proposal_id else {})
             aliases, entries, touched = {}, {}, set()
             for change in changes:
                 if not isinstance(change, dict) or set(change) - PROPOSAL_CHANGE_FIELDS:
@@ -944,7 +950,13 @@ class CycleRuntime(
             if not changes:
                 plan["no_changes_reason"] = no_changes_reason
             state = "prepared" if changes else "no_changes"
-            return self._save_plan(records, cycle, plan, state)
+            if entries:
+                # Covers automatic incoming-link edits and newly allocated IDs too.
+                plan["edit_reservations"] = self._edits().acquire(
+                    cycle_id, list(entries), summary or "Prepared knowledge proposal")
+            result = self._save_plan(records, cycle, plan, state)
+            self._release_unreferenced_edits(cycle_id, cycle, previous_bindings)
+            return result
 
     def _plan_codec(self, plan, side):
         catalog, owners = dict(self.engine.catalog), dict(self.engine.owners)
@@ -1171,9 +1183,21 @@ class CycleRuntime(
                 or entry["state"] not in {"prepared", "discarded"}
             ):
                 raise PCWError("Only the exact unapplied proposal may be discarded")
+            plan = self._load_plan(cycle_id, proposal_id, entry)
             entry["state"] = "discarded"
             self._persist(records)
+            self._release_unreferenced_edits(cycle_id, cycle, plan.get("edit_reservations", {}))
             return {"proposal_id": proposal_id, "status": "discarded"}
+
+    def _release_unreferenced_edits(self, cycle_id, cycle, previous_bindings):
+        bindings = dict(previous_bindings)
+        if not bindings:
+            return
+        for ident, entry in cycle["proposals"].items():
+            if entry["state"] not in {"applied", "discarded", "no_changes"}:
+                for material in self._load_plan(cycle_id, ident, entry).get("entries", {}):
+                    bindings.pop(material, None)
+        self._edits().release(cycle_id, bindings=bindings)
 
     def _matches(self, snapshot):
         path = self.engine.root / snapshot["path"]
@@ -1292,68 +1316,77 @@ class CycleRuntime(
             )
             self._assert_permanent_temporary_free(change["after"] for change in plan["entries"].values())
             self._preflight(plan, entry["state"] != "prepared")
-            entry["state"] = "applying"
-            self._persist(records)
-            try:
-                # Write survivors and redirect incoming links before any deletion.
-                for ident, change in plan["entries"].items():
-                    before, after = change["before"], change["after"]
-                    if after is None or self._matches(after):
-                        continue
-                    if (
-                        before is None
-                        or _parse(before["text"])[1] != _parse(after["text"])[1]
-                    ):
-                        self.engine._delete_rows(ident)
-                    target = self.engine.root / after["path"]
-                    if before and before["path"] != after["path"]:
-                        old = self.engine.root / before["path"]
-                        if old.exists():
-                            target.parent.mkdir(parents=True, exist_ok=True)
-                            os.rename(old, target)
-                            _sync_directory(old.parent)
+            bindings = plan.get("edit_reservations")
+            if bindings is None or entry["state"] != "prepared":
+                # Preserve immutable pre-upgrade reviews. Recovery still passed
+                # the exact before/after preflight; never overwrite newer bytes.
+                bindings = self._edits().acquire(cycle_id, list(plan["entries"]),
+                                               plan.get("summary") or "Apply reviewed knowledge proposal")
+            with self._edits().admission(cycle_id, bindings):
+                entry["state"] = "applying"
+                self._persist(records)
+                try:
+                    # Write survivors and redirect incoming links before any deletion.
+                    for ident, change in plan["entries"].items():
+                        before, after = change["before"], change["after"]
+                        if after is None or self._matches(after):
+                            continue
+                        if (
+                            before is None
+                            or _parse(before["text"])[1] != _parse(after["text"])[1]
+                        ):
+                            self.engine._delete_rows(ident)
+                        target = self.engine.root / after["path"]
+                        if before and before["path"] != after["path"]:
+                            old = self.engine.root / before["path"]
+                            if old.exists():
+                                target.parent.mkdir(parents=True, exist_ok=True)
+                                os.rename(old, target)
+                                _sync_directory(old.parent)
+                                _sync_directory(target.parent)
+                        self.engine._write(target, after["text"])
+                        if not self._matches(after):
+                            raise PCWError("Applied text verification failed")
+                    for ident, change in plan["entries"].items():
+                        if change["after"] is None:
+                            self.engine._delete_rows(ident)
+                            target = self.engine.root / change["before"]["path"]
+                            target.unlink(missing_ok=True)
                             _sync_directory(target.parent)
-                    self.engine._write(target, after["text"])
-                    if not self._matches(after):
-                        raise PCWError("Applied text verification failed")
-                for ident, change in plan["entries"].items():
-                    if change["after"] is None:
-                        self.engine._delete_rows(ident)
-                        target = self.engine.root / change["before"]["path"]
-                        target.unlink(missing_ok=True)
-                        _sync_directory(target.parent)
-                self.engine._scan()
-                self.engine._reconcile()
-                materials = [
-                    self.engine._index_receipt(self.engine._material(ident))
-                    for ident, change in plan["entries"].items()
-                    if change["after"] is not None
-                ]
-                history = self._history_record(proposal_id, plan=plan)
-                entry["state"] = (
-                    "index_pending"
-                    if any(m["index_status"] != "indexed" for m in materials)
-                    else "applied"
-                )
-                self._persist(records)
-                return {
-                    "proposal_id": proposal_id,
-                    "revision": expected_revision,
-                    "status": entry["state"],
-                    "materials": materials,
-                    "tmp_preserved": True,
-                    "history": history,
-                }
-            except Exception as exc:
-                entry["state"] = "partial"
-                self._persist(records)
-                return {
-                    "proposal_id": proposal_id,
-                    "status": "partial",
-                    "error": str(exc),
-                    "tmp_preserved": True,
-                    "next_action": "proposal_apply",
-                }
+                    self.engine._scan()
+                    self.engine._reconcile()
+                    materials = [
+                        self.engine._index_receipt(self.engine._material(ident))
+                        for ident, change in plan["entries"].items()
+                        if change["after"] is not None
+                    ]
+                    history = self._history_record(proposal_id, plan=plan)
+                    entry["state"] = (
+                        "index_pending"
+                        if any(m["index_status"] != "indexed" for m in materials)
+                        else "applied"
+                    )
+                    self._persist(records)
+                    if entry["state"] == "applied":
+                        self._edits().release(cycle_id, bindings=bindings)
+                    return {
+                        "proposal_id": proposal_id,
+                        "revision": expected_revision,
+                        "status": entry["state"],
+                        "materials": materials,
+                        "tmp_preserved": True,
+                        "history": history,
+                    }
+                except Exception as exc:
+                    entry["state"] = "partial"
+                    self._persist(records)
+                    return {
+                        "proposal_id": proposal_id,
+                        "status": "partial",
+                        "error": str(exc),
+                        "tmp_preserved": True,
+                        "next_action": "proposal_apply",
+                    }
 
     def finish(self, cycle_id: str, cancel: bool = False, confirmation: str | None = None,
                expected_revision: str | None = None):
@@ -1419,6 +1452,7 @@ class CycleRuntime(
                 self._purge(previous_id)
                 previous = records["cycles"][previous_id]
                 previous["state"], previous["proposals"] = "replaced", {}
+            self._edits().release(cycle_id)
             self._purge(cycle_id)
             cycle["state"] = cycle.pop("closing_as")
             cycle["proposals"] = {}  # no approval or draft body is carried forward

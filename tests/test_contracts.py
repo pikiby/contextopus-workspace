@@ -182,8 +182,10 @@ class LauncherTests(unittest.TestCase):
             installed = metadata.version("contextopus-core")
         except metadata.PackageNotFoundError:
             self.fail("Install the standalone project in the test interpreter first (uv sync --locked --extra test); copied compatibility shims require contextopus-core")
-        expected = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["version"]
-        self.assertEqual(expected, installed)
+        from packaging.specifiers import SpecifierSet
+        from packaging.version import Version
+        requirement = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["dependencies"][0]
+        self.assertIn(Version(installed), SpecifierSet(requirement.removeprefix("contextopus-core")))
         check = subprocess.run(
             ["/bin/sh", str(SHELL_LAUNCHER), "--check"],
             env={**os.environ, "PCW_PYTHON": sys.executable},

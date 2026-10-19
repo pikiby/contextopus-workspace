@@ -105,8 +105,8 @@ class EventStore:
 
     @property
     def schema_contract(self):
-        return {"engine": "sqlite", "schema_version": 1, "migrations": "sql_migrations",
-                "compatible_versions": {"min": 1, "max": 1}}
+        return {"engine": "sqlite", "schema_version": 2, "migrations": "sql_migrations",
+                "compatible_versions": {"min": 2, "max": 2}}
 
     @property
     def package(self):
@@ -128,6 +128,8 @@ class EventStore:
 
     @staticmethod
     def _upgrade_columns(db, version):
+        if version == 2:
+            return  # The additive reservation table is wholly declared in SQL.
         if version != 1:
             raise PCWError("Unsupported Workspace SQL migration")
         existing = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}

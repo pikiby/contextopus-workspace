@@ -288,8 +288,17 @@ class PCWRuntime:
         """The filename, including .md, is the sole material identity."""
         return _id(path.name)
 
+    def _check_edit_reservations(self, material_ids=None):
+        from .edit_reservations import EditReservations
+        EditReservations(self.control).check_write(material_ids)
+
     def _write(self, path: Path, text: str):
         self._assert_safe(path)
+        if path.is_relative_to(self.knowledge) and path.suffix == ".md":
+            ids = {_parse(text)[0].get("id", path.name)}
+            if path.is_file():
+                ids.add(_parse(path.read_bytes().decode("utf-8"))[0].get("id", path.name))
+            self._check_edit_reservations(list(ids))
         format_path = self.control.root / "format.json"
         # Recovery of a preceding migration must reproduce its immutable bytes;
         # the current migration adds owner tags after that recovery completes.
@@ -974,6 +983,7 @@ class PCWRuntime:
             }
 
     def _update(self, material: Material, content: str):
+        self._check_edit_reservations([material.id])
         if material.content != content:
             # Deleting first makes even a failed/partial save safely unsearchable.
             self._delete_rows(material.id)
@@ -997,6 +1007,7 @@ class PCWRuntime:
 
     def _move_same_id(self, material: Material, destination: Path, requested_path: str):
         """Move one filename-ID to another directory without changing identity."""
+        self._check_edit_reservations([material.id])
         old_path = material.path
         destination_relative = destination.relative_to(self.root).as_posix()
         try:
@@ -1100,6 +1111,7 @@ class PCWRuntime:
                     source_id,
                 )
                 prepared.append((material, links))
+            self._check_edit_reservations([m.id for m, links in prepared if m.links != links])
             applied = []
             for material, links in prepared:
                 replacement = Material(
@@ -1133,6 +1145,8 @@ class PCWRuntime:
                 )
 
     def _rewrite(self, mapping: dict[str, str | None], applied: list[str]):
+        self._check_edit_reservations([m.id for m in self.materials.values()
+                                       if set(mapping).intersection(m.links)])
         for material in self.materials.values():
             links = _unique_links(
                 [
@@ -1158,6 +1172,7 @@ class PCWRuntime:
             return {"status": "ok", "applied": applied}
 
     def _delete(self, material: Material, applied: list[str]):
+        self._check_edit_reservations([material.id])
         self._delete_rows(material.id)
         applied.append(f"index_removed:{material.id}")
         (self.root / material.path).unlink()
@@ -1168,6 +1183,7 @@ class PCWRuntime:
     def delete(self, material_id: str):
         with self._guard():
             material = self._material(material_id)
+            self._check_edit_reservations([material.id] + [m.id for m in self.materials.values() if material.id in m.links])
             applied = []
             try:
                 self._rewrite({material_id: None}, applied)
@@ -1180,6 +1196,7 @@ class PCWRuntime:
         """Apply agent-written survivors and exact old-ID to target-ID mappings."""
         with self._guard():
             self._mapping(replacements)
+            self._check_edit_reservations(list(set(replacements) | set(replacements.values()) | {m.id for m in self.materials.values() if set(replacements).intersection(m.links)}))
             targets = {item["id"] for item in materials}
             if len(targets) != len(materials) or targets != set(replacements.values()):
                 raise PCWError(

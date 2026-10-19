@@ -335,8 +335,13 @@ def test_body_and_link_conflicts_require_new_proposal(workspace):
     apply(runtime, cycle, original)
     item = runtime.read(cycle, original["created_ids"]["topic"])
     p = runtime.proposal_prepare(cycle, [{"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "material_id": item["id"], "expected_revision": item["revision"], "content": "New fact"}])
-    # A different agent updates the same body through another valid cycle.
+    # Competing edits are blocked before preparation. After explicit release,
+    # the existing revision conflict still prevents an old proposal overwriting.
     other = start(runtime, "other")
+    with pytest.raises(PCWError, match="reserved"):
+        runtime.reserve(other, [item["id"]], "Concurrent edit")
+    for lease in {row["reservation_id"] for row in p["reservations"]}:
+        runtime.reservation_release(cycle, lease)
     q = runtime.proposal_prepare(other, [{"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "material_id": item["id"], "expected_revision": item["revision"], "content": "Concurrent fact"}])
     apply(runtime, other, q)
     with pytest.raises(PCWError, match="conflict"):
@@ -465,6 +470,10 @@ def test_changed_incoming_links_conflict_before_merge_writes(workspace):
     merge = runtime.proposal_prepare(cycle, [{"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "material_id": a["id"], "expected_revision": a["revision"], "content": "Merged"},
         {"material_id": b["id"], "expected_revision": b["revision"], "delete": True}], {b["id"]: a["id"]})
     other = start(runtime, "other")
+    with pytest.raises(PCWError, match="reserved"):
+        runtime.reserve(other, [n["id"]], "Change incoming links")
+    for lease in {row["reservation_id"] for row in merge["reservations"]}:
+        runtime.reservation_release(cycle, lease)
     nav = runtime.proposal_prepare(other, [{"material_id": n["id"], "expected_revision": n["revision"], "links": [a["id"], b["id"]]}])
     apply(runtime, other, nav)
     with pytest.raises(PCWError, match="conflict"):

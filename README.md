@@ -16,10 +16,10 @@ procedure for finding evidence, reviewing changes and continuing unfinished work
 
 ## Install
 
-**Workspace 1.5.0 requires Core >=1.5,<2 and Python 3.12+.** Install Core first
+**Workspace 1.6.0 requires Core >=1.5,<2 and Python 3.12+.** Install Core first
 and start its service. The selected root must match that running Core owner.
 Download and extract the [latest module ZIP](https://github.com/pikiby/contextopus-workspace/releases/latest/download/contextopus-workspace.zip)
-or the [exact 1.5.0 ZIP](https://github.com/pikiby/contextopus-workspace/releases/download/v1.5.0/contextopus-workspace-1.5.0.zip).
+or the [exact 1.6.0 ZIP](https://github.com/pikiby/contextopus-workspace/releases/download/v1.6.0/contextopus-workspace-1.6.0.zip).
 Release availability is listed on the [releases page](https://github.com/pikiby/contextopus-workspace/releases).
 If the asset is not available yet, [build it from this checkout](docs/install.md#build-from-source).
 
@@ -74,6 +74,15 @@ After enabling Workspace, preview and apply Core's native client integration to
 install its six skills. Enabling the module alone does not overwrite client files.
 [Session Search](https://github.com/pikiby/contextopus-session-search) is a separate
 module for coding-session conversations.
+
+## Work across sessions
+
+Several sessions can read the same context and update different records. Before
+editing a shared card, Workspace reserves it for one work cycle with a short
+explanation visible to competing agents. Related changes reserve their whole set;
+expired sessions do not keep cards occupied forever. Revision checks still protect
+against stale proposals and external file edits.
+[Concurrent editing and recovery](docs/concurrent-editing.md).
 
 ## Develop
 

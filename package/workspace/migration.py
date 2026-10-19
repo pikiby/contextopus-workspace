@@ -662,6 +662,11 @@ class FormatMigrationMixin:
                 operation if operation and operation["status"] != "complete" else None
             )
             work, blockers = self._migration_work()
+            from .edit_reservations import EditReservations
+            editing = EditReservations(self.control).rows()
+            if editing:
+                blockers.append({"reason": "Active material reservations must be released or expire before migration",
+                                 "reservations": editing})
             temporary = {}
             try:
                 assert_unique_context_names(self.control.layout)
@@ -815,6 +820,8 @@ class FormatMigrationMixin:
                 "Explicit migration request or automatic format-upgrade procedure required"
             )
         with self.control.guard():
+            from .edit_reservations import EditReservations
+            EditReservations(self.control).check_write()
             receipt = self._migration_receipt_path()
             operation = json.loads(read_utf8(receipt)) if receipt.exists() else None
             if (

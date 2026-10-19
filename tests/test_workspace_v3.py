@@ -278,6 +278,10 @@ def legacy_with_work(tmp_path):
     for cycle_id, cycle in records["cycles"].items():
         for proposal_id, entry in cycle["proposals"].items():
             plan = runtime._load_plan(cycle_id, proposal_id, entry)
+            # This fixture represents a pre-reservation writer, not a live
+            # modern lease attached to artificially old Markdown.
+            runtime._edits().release(cycle_id)
+            plan.pop("edit_reservations", None)
             plan.pop("format_version", None)
             plan.pop("settings_revision", None)
             plan["instructions_revision"] = _revision(legacy_rules)

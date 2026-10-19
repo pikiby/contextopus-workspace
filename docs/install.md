@@ -1,6 +1,6 @@
 # Install Workspace
 
-Workspace 1.5.0 is a separate optional module for Contextopus Core >=1.5,<2.
+Workspace 1.6.0 is a separate optional module for Contextopus Core >=1.5,<2.
 Python 3.12+ is required. Start the compatible Core service before module
 installation; the selected root must match that running owner. `--root` selects
 the data root and does not start a separate server. Core 1.4.0 does not provide the generic source-install
@@ -9,7 +9,7 @@ interface used by these installers.
 ## Install a module release
 
 Download the [latest ZIP](https://github.com/pikiby/contextopus-workspace/releases/latest/download/contextopus-workspace.zip)
-or the [versioned 1.5.0 ZIP](https://github.com/pikiby/contextopus-workspace/releases/download/v1.5.0/contextopus-workspace-1.5.0.zip)
+or the [versioned 1.6.0 ZIP](https://github.com/pikiby/contextopus-workspace/releases/download/v1.6.0/contextopus-workspace-1.6.0.zip)
 and its SHA256SUMS from the [release](https://github.com/pikiby/contextopus-workspace/releases).
 Check the checksum, extract the ZIP and enter its `workspace` directory.
 
@@ -65,7 +65,7 @@ Workspace skills. Module activation alone does not replace client files. See
 The builder uses only Python's standard library:
 
 ```console
-python scripts/build-module.py dist/workspace --archive dist/contextopus-workspace-1.5.0.zip
+python scripts/build-module.py dist/workspace --archive dist/contextopus-workspace-1.6.0.zip
 sh dist/workspace/install.sh --root /path/to/data --plan
 ```
 
@@ -75,7 +75,7 @@ guides. Bytecode, generated packaging metadata, tests, archives, mutable state a
 repository metadata are excluded. Existing output paths are refused.
 
 For release assets with checksums, use `python scripts/build-release.py dist` in a
-fresh output directory. It produces `contextopus-workspace-1.5.0.zip`, the identical
+fresh output directory. It produces `contextopus-workspace-1.6.0.zip`, the identical
 `contextopus-workspace.zip` download alias and SHA256SUMS.
 
 ## Verify without live data
@@ -83,7 +83,7 @@ fresh output directory. It produces `contextopus-workspace-1.5.0.zip`, the ident
 With a compatible Core installed in the selected interpreter:
 
 ```console
-python scripts/verify_installed.py --workspace-module dist/contextopus-workspace-1.5.0.zip
+python scripts/verify_installed.py --workspace-module dist/contextopus-workspace-1.6.0.zip
 ```
 
 This uses disposable storage to install, disable, restart and re-enable the module,
