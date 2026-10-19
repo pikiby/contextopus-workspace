@@ -80,6 +80,8 @@ def test_legacy_cutover_preserves_every_row_reference_and_cursor(tmp_path):
     with store.connect() as db:
         current = inventory(db)
         current["tables"].pop("_contextopus_module_migrations")
+        current["tables"].pop("workspace_edit_reservations")
+        assert db.execute("SELECT count(*) FROM workspace_edit_reservations").fetchone()[0] == 0
         assert current["tables"] == original["tables"]
         assert db.execute("SELECT rowid FROM versions").fetchone()[0] == 7
     assert store.read("original-id")["params"]["value"] == "original"

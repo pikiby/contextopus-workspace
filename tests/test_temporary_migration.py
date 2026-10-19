@@ -170,6 +170,13 @@ def test_pending_review_applies_original_revision_after_real_migration(tmp_path)
         runtime.tmp_write(cycle, '# Working investigation\nKeep unfinished evidence.')
         proposal = runtime.proposal_prepare(cycle, [{'key': 'fact', 'content': '# Reviewed fact\nVerified evidence.',
             'description': 'Records the reviewed fact from a synthetic migration fixture'}])
+        # The source fixture represents a release without edit reservations.
+        with runtime._cycle(cycle) as (records, state):
+            entry = state['proposals'][proposal['proposal_id']]
+            old_plan = runtime._load_plan(cycle, proposal['proposal_id'], entry)
+            runtime._edits().release(cycle)
+            old_plan.pop('edit_reservations', None)
+            proposal = runtime._save_plan(records, state, old_plan, 'prepared')
         original_path = runtime._plan_path(cycle, proposal['proposal_id'])
         original_bytes = original_path.read_bytes()
         review_bytes = original_path.with_suffix('.md').read_bytes()

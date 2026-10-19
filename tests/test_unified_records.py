@@ -61,6 +61,8 @@ def test_recovers_interrupted_preceding_format_before_v3(tmp_path, interruption,
 
 
 def workspace(root, name="alpha", factory=None):
+    from workspace_support import prepare_workspace_storage
+    prepare_workspace_storage(root)
     runtime = CycleRuntime(root, name, provider_factory=factory or Factory())
     rules = files("workspace").joinpath("default_instructions.md").read_text(encoding="utf-8").replace("material_max_tokens: 1024", "material_max_tokens: null")
     project = f"---\ndescription: Defines shared observability goals and the project boundaries.\n---\n# {name}\nProject for shared observability"
@@ -111,6 +113,9 @@ def test_migrate_current_preserves_ids_pending_proposal_and_retry(tmp_path, line
     with runtime._cycle(cycle) as (records, state):
         old = runtime._load_plan(cycle, proposal["proposal_id"], state["proposals"][proposal["proposal_id"]])
         old.pop("settings_revision", None)
+        # A real pre-v4 proposal predates edit ownership.
+        runtime._edits().release(cycle)
+        old.pop("edit_reservations", None)
         from workspace.runtime import _revision
         # Revisions cover the actual old writer's bytes, including CRLF.
         old["instructions_revision"] = _revision(rules.read_bytes().decode("utf-8"))

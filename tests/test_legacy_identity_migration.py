@@ -29,6 +29,8 @@ def legacy(tmp_path, name, *, links=(), version=0):
     (root / 'INSTRUCTIONS.md').write_bytes(RULES.encode())
     note(root, 'index.md', '# ' + name + ' index\nOriginal.', links)
     note(root, 'workfile.md', '# ' + name + ' work\nOngoing.', ['index.md'])
+    from workspace_support import prepare_workspace_storage
+    prepare_workspace_storage(tmp_path)
     runtime = CycleRuntime(tmp_path, name, provider_factory=Factory())
     if version:
         with runtime.control.guard():

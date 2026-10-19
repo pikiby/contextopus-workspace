@@ -9,20 +9,13 @@ from workspace.cycles import CycleRuntime
 from workspace.runtime import PCWError
 from workspace.text_io import read_utf8
 from test_runtime import Factory
-from workspace.analytics import EventStore
-
-
-def prepare_module_storage(root):
-    # Direct domain fixtures perform the same explicit schema step as module install.
-    store = EventStore(root)
-    plan = store.storage_prepare()
-    store.storage_apply(plan['revision'])
+from workspace_support import prepare_workspace_storage
 
 
 @pytest.fixture
 def base(tmp_path):
     (tmp_path / 'modules/workspace/workspace_contexts').mkdir(parents=True)
-    prepare_module_storage(tmp_path)
+    prepare_workspace_storage(tmp_path)
     factory = Factory()
     bundle = packaged_bundle()
     bundle['documents'] = [
@@ -41,7 +34,7 @@ def install(service):
 def test_packaged_scenario_upgrade_keeps_existing_ids_and_resolves_navigation(tmp_path):
     """Exercise the real bundle graph, including links to newly shipped topics."""
     (tmp_path / 'modules/workspace/workspace_contexts').mkdir(parents=True)
-    prepare_module_storage(tmp_path)
+    prepare_workspace_storage(tmp_path)
     bundle = packaged_bundle()
     original_keys = {'installed-version', 'workspace-guide', 'module-guide', 'algorithm-guide',
                      'module-template', 'algorithm-template', 'rules-template'}

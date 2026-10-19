@@ -25,3 +25,12 @@ def workspace_module(app, name):
     import sys
     host = app.module_manager.contributions['workspace']
     return sys.modules[host._namespace + '.' + name]
+
+
+def prepare_workspace_storage(root):
+    """Explicit SQL setup for domain fixtures that do not run Core installation."""
+    from workspace.analytics import EventStore
+    store = EventStore(root)
+    plan = store.storage_prepare()
+    if plan['needs_migration']:
+        store.storage_apply(plan['revision'])

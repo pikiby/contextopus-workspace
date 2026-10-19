@@ -16,6 +16,8 @@ from test_runtime import Factory
 
 
 def context(root, name="alpha", factory=None):
+    from workspace_support import prepare_workspace_storage
+    prepare_workspace_storage(root)
     runtime = CycleRuntime(root, name, provider_factory=factory or Factory())
     rules = files("workspace").joinpath("default_instructions.md").read_text(encoding="utf-8")
     rules = rules.replace("material_max_tokens: 1024", "material_max_tokens: null").replace("git_history_enabled: true", "git_history_enabled: false")

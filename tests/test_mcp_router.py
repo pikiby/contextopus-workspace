@@ -19,7 +19,7 @@ def test_two_small_tools_and_storage_free_discovery(tmp_path):
         for tool in tools:
             assert set(tool.inputSchema["properties"]) == {"operation", "work_root", "workspace", "arguments"}
         catalog = server.pcw_query("describe")["operations"]
-        assert len(catalog["pcw_query"]) + len(catalog["pcw_execute"]) == 50
+        assert len(catalog["pcw_query"]) + len(catalog["pcw_execute"]) == 54
         assert not set(catalog["pcw_query"]) & set(catalog["pcw_execute"])
         assert set(catalog["pcw_query"] + catalog["pcw_execute"]) == server._DESCRIPTIONS.keys()
         for tool, names in catalog.items():

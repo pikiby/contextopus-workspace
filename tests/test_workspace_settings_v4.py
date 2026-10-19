@@ -400,6 +400,8 @@ def test_quiescent_root_snapshot_restores_data_configuration_git_sqlite_and_rag(
     entry = records["cycles"][cycle]["proposals"][proposal["proposal_id"]]
     old_proposal = runtime._load_plan(cycle, proposal["proposal_id"], entry)
     old_proposal.pop("settings_revision")
+    runtime._edits().release(cycle)
+    old_proposal.pop("edit_reservations", None)
     old_proposal["instructions_revision"] = _revision(old_rules)
     runtime.engine._write(runtime._plan_path(cycle, proposal["proposal_id"]), _json(old_proposal))
     entry["revision"] = proposal["revision"] = _revision(_json(old_proposal))
