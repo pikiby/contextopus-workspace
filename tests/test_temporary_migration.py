@@ -398,7 +398,7 @@ def test_v4_upgrade_retains_mixed_instruction_blocker_without_blocking_format(tm
     try:
         create(r, git_history_enabled=False)
         cycle = r.startup('existing-mixed-review', purpose='instructions')['cycle_id']
-        rules = (r.engine.root / 'INSTRUCTIONS.md').read_bytes()
+        rules = r.instructions_read()['content'].encode('utf-8')
         settings = json.loads(configuration_text(r.control.layout, 'alpha'))
         before = '---\nknowledge_approval_required: true\n---\n# Previous human rules\n'
         after = before.replace('true', 'false')
@@ -421,13 +421,13 @@ def test_v4_upgrade_retains_mixed_instruction_blocker_without_blocking_format(tm
         r.upgrade_apply(proposed['revision'], 'Upgrade format while retaining old approval limits')
         assert r._plan_path(cycle, 'mixed').read_bytes() == original
         assert r._plan_path(cycle, 'mixed').with_suffix('.md').read_bytes() == review
-        assert (r.engine.root / 'INSTRUCTIONS.md').read_bytes() == rules
+        assert r.instructions_read()['content'].encode('utf-8') == rules
         assert json.loads(configuration_text(r.control.layout, 'alpha')) == settings
         receipt = json.loads(r._migration_receipt_path().read_text())
         assert receipt['overlays'][cycle + '/mixed'] == blocked
         with pytest.raises(PCWError, match='mixed settings approval'):
             r.instructions_apply(cycle, 'mixed', saved['revision'], confirmation='Original approval')
-        assert (r.engine.root / 'INSTRUCTIONS.md').read_bytes() == rules
+        assert r.instructions_read()['content'].encode('utf-8') == rules
         # Earlier conversion paths retain their existing strict execution rule.
         with pytest.raises(PCWError, match='mixed settings approval'):
             r._proposal_overlays({}, {})
@@ -465,3 +465,27 @@ def test_external_same_tail_is_not_an_actual_temporary_inventory_path(tmp_path):
     assert permanent_temporary_references('# Permanent\n[source](' + str(path) + ')', transforms)
     note = runtime.engine.knowledge / 'Fact.md'
     assert permanent_temporary_references('# Permanent\n[source](../tmp/cycle/materials/Evidence.md)', transforms, source_path=note)
+
+
+def test_dependency_scan_reuses_temporary_yaml_inventory(tmp_path):
+    from types import SimpleNamespace
+    from unittest.mock import patch
+    import workspace.temporary_migration as migration
+    root = tmp_path / 'context'
+    knowledge = root / 'knowledge'
+    knowledge.mkdir(parents=True)
+    for index in range(12):
+        (knowledge / f'{index}.md').write_text('---\nid: permanent-' + str(index) + '\nlinks: ["temporary-id"]\n---\nVerified permanent fact.\n')
+    transforms = {'tmp/cycle/materials/old.md': {'path': '.tmp/cycle/materials/Friendly.md',
+        'text': '---\nid: temporary-id\ntype: knowledge\nlinks: []\n---\nWorking observation.\n'}}
+    runtime = SimpleNamespace(engine=SimpleNamespace(root=root, _assert_safe=lambda path: None))
+    original = migration._parse
+    temporary_parses = []
+    def observe(text):
+        if text == transforms['tmp/cycle/materials/old.md']['text']:
+            temporary_parses.append(text)
+        return original(text)
+    with patch.object(migration, '_parse', observe):
+        blockers = migration.permanent_temporary_blockers(runtime, transforms)
+    assert len(blockers) == 12 and all(item['target'] == 'temporary-id' for item in blockers)
+    assert len(temporary_parses) == 1

@@ -1,3 +1,4 @@
+from workspace_support import reconstruct_legacy_rules
 """Canonical policies, free rules and recoverable legacy upgrades on real storage."""
 import copy
 import json
@@ -35,7 +36,7 @@ def context(tmp_path, **overrides):
 
 def downgrade(runtime, instructions):
     """Actual prior-format storage: legacy flags and no canonical policy fields."""
-    runtime.engine._write(runtime.engine.root / "INSTRUCTIONS.md", instructions)
+    reconstruct_legacy_rules(runtime, instructions)
     path = Settings(runtime.control.layout)._scope_path("workspace", runtime.engine.workspace)
     path.unlink()
     runtime.control.write(runtime._format_path(), _json({"format_version": 3}))
@@ -303,7 +304,7 @@ def test_format_three_upgrade_preserves_user_bytes_settings_work_and_backups(tmp
         old = legacy_instructions(allow_implicit_updates=True, material_max_tokens=None)
         downgrade(runtime, old)
         plan = runtime.upgrade_plan()
-        assert plan["from_version"] == 3 and plan["to_version"] == 5 and plan["ready"]
+        assert plan["from_version"] == 3 and plan["to_version"] == 6 and plan["ready"]
         result = runtime.upgrade_apply(plan["revision"], "Upgrade to 1.3")
         assert result["status"] == "complete"
         assert (Path(result["backup"]) / "INSTRUCTIONS.md").read_bytes() == old.encode()
@@ -324,15 +325,17 @@ def test_settings_transition_resumes_after_instruction_write_crash(tmp_path):
         old = legacy_instructions()
         downgrade(runtime, old)
         plan = runtime.upgrade_plan()
-        original = runtime.engine._write
+        from workspace.context_document import library
+        store_type = type(library(runtime))
+        original = store_type.save
         failed = False
-        def crash(path, text):
+        def crash(store, *args, **kwargs):
             nonlocal failed
-            if path.name == "INSTRUCTIONS.md" and not failed:
+            if not failed:
                 failed = True
                 raise OSError("Injected interruption after configuration write")
-            return original(path, text)
-        with patch.object(runtime.engine, "_write", side_effect=crash), pytest.raises(OSError, match="Injected"):
+            return original(store, *args, **kwargs)
+        with patch.object(store_type, "save", crash), pytest.raises(OSError, match="Injected"):
             runtime.upgrade_apply(plan["revision"], "Upgrade")
         assert json.loads(configuration_text(runtime.control.layout, "project"))["material_max_tokens"] == 1024
         assert runtime.upgrade_apply(plan["revision"], "Resume")["status"] == "complete"
@@ -400,6 +403,7 @@ def test_quiescent_root_snapshot_restores_data_configuration_git_sqlite_and_rag(
     entry = records["cycles"][cycle]["proposals"][proposal["proposal_id"]]
     old_proposal = runtime._load_plan(cycle, proposal["proposal_id"], entry)
     old_proposal.pop("settings_revision")
+    old_proposal.pop("required_instructions_revision", None)
     runtime._edits().release(cycle)
     old_proposal.pop("edit_reservations", None)
     old_proposal["instructions_revision"] = _revision(old_rules)
@@ -409,7 +413,7 @@ def test_quiescent_root_snapshot_restores_data_configuration_git_sqlite_and_rag(
     # The legacy HEAD has the policy frontmatter and no virtual settings path.
     runtime._history_git("update-index", "--no-skip-worktree", "--", SETTINGS_HISTORY_PATH)
     runtime._history_git("update-index", "--force-remove", "--", SETTINGS_HISTORY_PATH)
-    runtime._history_git("add", "--", "INSTRUCTIONS.md", "knowledge/")
+    runtime._history_git("add", "--", "INSTRUCTIONS.md", "Context.md", "knowledge/")
     runtime._history_git("commit", "-m", "Legacy format-three snapshot before upgrade")
     old_head = runtime._history_revision("HEAD")
     assert runtime._history_blob(old_head, SETTINGS_HISTORY_PATH) is None
@@ -451,12 +455,12 @@ def test_quiescent_root_snapshot_restores_data_configuration_git_sqlite_and_rag(
 
     runtime = CycleRuntime(root, "project", provider_factory=Factory())
     plan = runtime.upgrade_plan()
-    write = runtime.engine._write
-    def interrupted(path, text):
-        if path.name == "INSTRUCTIONS.md":
-            raise OSError("Injected interruption after canonical settings save")
-        return write(path, text)
-    with patch.object(runtime.engine, "_write", side_effect=interrupted), pytest.raises(OSError, match="Injected"):
+    from workspace.context_document import library
+    store_type = type(library(runtime))
+    write = store_type.save
+    def interrupted(store, *args, **kwargs):
+        raise OSError("Injected interruption after canonical settings save")
+    with patch.object(store_type, "save", interrupted), pytest.raises(OSError, match="Injected"):
         runtime.upgrade_apply(plan["revision"], "Upgrade the isolated copy")
     assert json.loads(configuration_text(layout, "project"))["allow_implicit_updates"]
     assert runtime.upgrade_apply(plan["revision"], "Resume the isolated upgrade")["status"] == "complete"

@@ -118,7 +118,7 @@ class WorkspaceSourceAdapter(PCWRuntime):
             self._assert_safe(previous)
             if previous.is_file():
                 reserved.update(json.loads(read_utf8(previous)))
-            for version in (4, 5):
+            for version in (4, 5, 6):
                 receipt = directory / f"migration-v{version}.json"
                 self._assert_safe(receipt)
                 if receipt.is_file():
@@ -160,18 +160,14 @@ class WorkspaceSourceAdapter(PCWRuntime):
             self._assert_safe(marker)
             compatible = (
                 marker.is_file()
-                and json.loads(read_utf8(marker)).get("format_version") in (2, 3, 4, 5)
+                and json.loads(read_utf8(marker)).get("format_version") in (2, 3, 4, 5, 6)
             )
             if root != self.root and not compatible:
                 self.incompatible.append(root.name)
                 continue
             self.categories.append(root.name)
-            for path in sorted((root / "knowledge").rglob("*.md")):
-                if any(
-                    p.startswith(".")
-                    for p in path.relative_to(root / "knowledge").parts
-                ):
-                    continue
+            from .context_document import record_paths
+            for path in record_paths(root):
                 self._assert_safe(path)
                 stat = path.stat()
                 signature = (
@@ -218,6 +214,14 @@ class WorkspaceSourceAdapter(PCWRuntime):
             (i, self.owners[i], m.path, m.revision) for i, m in self.catalog.items()
         )
         self._file_cache = cache
+
+    def library_capture(self):
+        """Read source records even when the optional derived index is absent."""
+        with self._mutex:
+            if not self.root.is_dir():
+                raise PCWError("Workspace does not exist")
+            self._scan()
+            return {"incompatible": list(self.incompatible)}
 
     def _rows(self, columns=None):
         return self.index.read_rows(

@@ -1,3 +1,7 @@
+---
+operations: ["workspace.search", "workspace.status", "workspace.switch_embeddings"]
+---
+
 # Embedding configuration
 
 Read for explicit connection or profile changes, search settings, or embedding failures. Use the active configuration returned by `status` and the `switch_embeddings` schema. A user request for ordinary memory work does not select a paid service.

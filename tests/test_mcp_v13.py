@@ -215,7 +215,7 @@ def test_workspace_signature_aliases_deliver_shared_preconditions_without_readin
         assert result['description'].startswith(_RETRIEVAL_PRECONDITIONS)
         assert 'operation signature does not replace it' in result['description']
         assert 'workspace.settings_read' in result['description']
-        assert 'complete current INSTRUCTIONS' in result['description']
+        assert 'complete current required instructions' in result['description']
         assert 'workspace.startup for work' in result['description']
         assert 'workspace.instructions_read for independent retrieval' in result['description']
         assert 'same task/context' in result['description']

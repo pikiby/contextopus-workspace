@@ -29,7 +29,7 @@ def test_automatic_history_tracks_permanent_files_only(tmp_path):
     assert len(runtime.history_list()["versions"]) == 2
     paths = runtime.engine._git("ls-tree", "--name-only", "-r", "HEAD").stdout.splitlines()
     task = runtime.read(material_id=plan["created_ids"]["task"])
-    assert sorted(paths) == sorted([runtime.project_read()["path"], "INSTRUCTIONS.md", ".contextopus-settings.json", item["path"], task["path"]])
+    assert sorted(paths) == sorted([runtime.project_read()["path"], "INSTRUCTIONS.md", ".contextopus-settings.json", ".contextopus-instructions/workspace.p.md", item["path"], task["path"]])
     assert not any(path.startswith(("tmp/", ".tmp/")) for path in paths)
     diff = runtime.history_diff(initial["history"]["commit"], result["history"]["commit"])
     assert "+First" in diff["diff"]

@@ -18,7 +18,7 @@ from .settings import WorkspaceSettingsMixin, configuration_text, save_configura
 from .configuration import WorkspaceSettings as Settings, WORKSPACE_SETTINGS, WORKSPACE_POLICY_DEFAULTS, WORKSPACE_CREATION_DEFAULTS
 
 
-FORMAT_VERSION = 5  # Workspace format, deliberately independent of plugin releases.
+FORMAT_VERSION = 6  # Workspace format, deliberately independent of plugin releases.
 EMPTY_PROJECT = "# Project\n\nPurpose, goals, requirements and boundaries have not been specified.\n"
 
 
@@ -82,6 +82,10 @@ class WorkspaceMixin(WorkspaceSettingsMixin):
         )
 
     def _instruction_initialization(self, content=None):
+        from .context_document import read_instructions
+        active_rules = read_instructions(self)
+        if active_rules is not None:
+            return {"required": False, "status": "present"}
         path = self.engine.root / "INSTRUCTIONS.md"
         self.engine._assert_safe(path)
         marker = self.control.root / "instructions-initialized.json"
@@ -117,7 +121,7 @@ class WorkspaceMixin(WorkspaceSettingsMixin):
             raise PCWError(
                 f"Workspace format {version}; required {FORMAT_VERSION}. Use pcw-upgrade; opening does not migrate."
             )
-        required = ["INSTRUCTIONS.md"]
+        required = ["Context.md"]
         if storage:
             required += ["knowledge"]
         for relative in required:
@@ -220,9 +224,19 @@ class WorkspaceMixin(WorkspaceSettingsMixin):
             from .records import project_record
             project_id, project_text = project_record(self.engine.workspace, project_content,
                                                       description=project_description)
+            from .context_document import ensure_instruction, bind_project, library, instruction_name
+            project_text = bind_project(self, project_text)
+            references = _parse(project_text)[0]["instructions"]
+            default_reference = "[[" + instruction_name(self.engine.workspace).removesuffix(".md") + "]]"
+            if references["workspace"] == default_reference:
+                ensure_instruction(self, instruction_text)
+            else:
+                primary = library(self).read(references["workspace"])
+                if primary["content"] != instruction_text:
+                    raise PCWError("The selected shared Workspace instruction differs from the agreed creation rules")
+            library(self).resolve(list(references.values()))
             for relative, content in {
-                "INSTRUCTIONS.md": instruction_text,
-                "knowledge/Project.md": project_text,
+                "Context.md": project_text,
             }.items():
                 path = self.engine.root / relative
                 self.engine._assert_safe(path)
@@ -419,7 +433,8 @@ class WorkspaceMixin(WorkspaceSettingsMixin):
 
     def _project_description_status(self):
         candidates = []
-        for path in self.engine.knowledge.rglob("*.md"):
+        from .context_document import record_paths
+        for path in record_paths(self.engine.root):
             self.engine._assert_safe(path)
             metadata, body = _parse(read_utf8(path))
             if metadata.get("type") == "project":

@@ -1,3 +1,7 @@
+---
+operations: ["workspace.contexts", "workspace.project_read", "workspace.projects_search"]
+---
+
 # Find a context
 
 Use the configured common memory root. Discovery does not require a selected Workspace or a work cycle and does not change another session's selection.

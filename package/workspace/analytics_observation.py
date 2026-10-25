@@ -50,8 +50,8 @@ class Observation:
         if operation in {"settings_read", "settings_preview", "settings_apply"}:
             self.metadata["instructions_ref"] = {"status": "unknown", "path": "INSTRUCTIONS.md",
                 "reason": "operation_does_not_read_instructions"}
-        elif path.is_file():
-            text = path.read_bytes().decode("utf-8")
+        elif path.is_file() or (runtime.engine.root / "Context.md").is_file():
+            text = runtime._instructions()["content"]
             reference = self._reference(runtime, "INSTRUCTIONS.md", text, "file")
             self.metadata.update(instructions_revision=digest(text), instructions_ref=reference)
         from .history_queries import SETTINGS_HISTORY_PATH
@@ -85,6 +85,8 @@ class Observation:
                 from .history_queries import SETTINGS_HISTORY_PATH
                 if path == SETTINGS_HISTORY_PATH:
                     full = runtime._settings_history_text()
+                elif path == "INSTRUCTIONS.md":
+                    full = runtime._instructions()["content"]
                 else:
                     target = runtime.engine.root / path
                     runtime.engine._assert_safe(target)
@@ -102,7 +104,7 @@ class Observation:
         path, text = value.get("path"), value.get("content")
         if not isinstance(path, str) or not isinstance(text, str):
             return None
-        if path != "INSTRUCTIONS.md" and path != "PROJECT.md" and not path.startswith("knowledge/"):
+        if path not in {"INSTRUCTIONS.md", "PROJECT.md", "Context.md"} and not path.startswith("knowledge/"):
             return None
         owner = value.get("workspace", self.runtime.engine.workspace)
         other = None
@@ -111,7 +113,7 @@ class Observation:
             if owner != runtime.engine.workspace:
                 other = type(runtime)(runtime.engine.work_root, owner)
                 runtime = other
-            projection = "body" if path.startswith("knowledge/") else "file"
+            projection = "body" if path.startswith("knowledge/") or path == "Context.md" else "file"
             reference = self._reference(runtime, path, text, projection, value.get("revision"))
             reference.update(material_id=value.get("id"), role="returned_material")
             self._references.append(reference)

@@ -11,7 +11,7 @@ from pathlib import Path, PurePosixPath
 import tempfile
 import zipfile
 
-WORKSPACE_SKILLS = {'w', 'w-search', 'w-create', 'w-settings', 'w-context', 'w-analyze'}
+WORKSPACE_SKILLS = {'contextopus-workspace', 'contextopus-workspace-search', 'contextopus-workspace-create', 'contextopus-workspace-settings', 'contextopus-workspace-context', 'contextopus-workspace-analyze'}
 
 
 def planned_skills(root):
@@ -45,7 +45,7 @@ def workspace_smoke(root, module, expected_version):
         raise ValueError('Workspace base-context version differs from its module release')
     storage = root / 'core/storage/modules/workspace.sqlite3'
     with Application(root, discover=False) as app:
-        if storage.exists() or 'workspace' in app.registry.modules or planned_skills(root) != {'m'}:
+        if storage.exists() or 'workspace' in app.registry.modules or planned_skills(root) != {'contextopus-modules'}:
             raise ValueError('Workspace discovery unexpectedly activated module content')
         result = app.execute('core.module_install', {'module': 'workspace'})
         if result['state'] != 'enabled' or not storage.is_file():
@@ -69,12 +69,12 @@ def workspace_smoke(root, module, expected_version):
                 raise ValueError('Workspace operation registration is incomplete')
         if app.query('workspace.contexts')['total'] != 0:
             raise ValueError('Temporary Workspace unexpectedly contains user contexts')
-        if planned_skills(root) != WORKSPACE_SKILLS | {'m'}:
+        if planned_skills(root) != WORKSPACE_SKILLS | {'contextopus-modules'}:
             raise ValueError('Enabled Workspace skills were not discovered through its manifest')
         if app.resources.providers._entries:
             raise ValueError('Workspace installation unexpectedly loaded an embedding model')
         app.execute('core.module_disable', {'module': 'workspace'})
-        if 'workspace' in app.index.source_adapters or planned_skills(root) != {'m'}:
+        if 'workspace' in app.index.source_adapters or planned_skills(root) != {'contextopus-modules'}:
             raise ValueError('Disabled Workspace retained its RAG source or skills')
         if any(name.startswith('workspace.') for name in app.registry._operations):
             raise ValueError('Disabled Workspace retained its operations')

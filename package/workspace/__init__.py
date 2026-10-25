@@ -16,6 +16,8 @@ def register(host):
 
     register_operations(host.registry, provider_factory=host.resources.acquire)
     register_discovery(host)
+    from .library import register as register_library
+    register_library(host)
     register_base(host)
     host.index.register_source('workspace', WorkspaceEligibility(host.layout, host.resources.acquire))
     host.settings_provider(WorkspaceSettings)

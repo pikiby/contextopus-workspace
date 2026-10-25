@@ -1,3 +1,7 @@
+---
+operations: ["core.algorithms", "core.algorithms_refresh", "core.index_stats", "core.search_event", "workspace.read", "workspace.read_many", "workspace.search"]
+---
+
 # Search and read context
 
 Obtain the ordinary `workspace` procedure if it is not already available; its context selection, full-rule reading/rereading and required-source steps apply. Do not reload it between phases. Never act without an applicable procedure. This search procedure adds retrieval details; independent reading starts no work cycle and creates no memory-write obligation.

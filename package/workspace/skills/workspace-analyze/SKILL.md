@@ -1,5 +1,5 @@
 ---
-name: w-analyze
+name: workspace-analyze
 description: Analyze agent operations and search effectiveness within a bounded period and historical rules; use audit for knowledge quality.
 ---
 

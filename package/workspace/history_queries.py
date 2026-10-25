@@ -6,7 +6,7 @@ from .history_events import read_event
 
 
 SETTINGS_HISTORY_PATH = ".contextopus-settings.json"
-PERMANENT_PATHS = ["knowledge/", "INSTRUCTIONS.md", "PROJECT.md", SETTINGS_HISTORY_PATH]
+PERMANENT_PATHS = ["knowledge/", "Context.md", "INSTRUCTIONS.md", "PROJECT.md", ".contextopus-instructions/", SETTINGS_HISTORY_PATH]
 
 
 def page(offset, limit):
@@ -128,7 +128,7 @@ class HistoryQueriesMixin:
 
     def _history_record_paths(self, revision, material_id):
         ident = _id(material_id)
-        result = self._history_git("grep", "-z", "-l", "-F", "-e", ident, revision, "--", "knowledge/", check=False)
+        result = self._history_git("grep", "-z", "-l", "-F", "-e", ident, revision, "--", "knowledge/", "Context.md", check=False)
         if result.returncode not in (0, 1):
             raise PCWError(result.stderr.strip() or "Git record lookup failed")
         selected = []

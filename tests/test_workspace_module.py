@@ -62,3 +62,20 @@ def test_workspace_and_ordinary_module_preserve_separate_state_on_restart(tmp_pa
                 assert after[field] == before[field]
             assert restarted.query('workspace.status', {'cycle_id': cycle})['cycle_status'] == 'active'
             assert restarted.query('notes.read')['rows'] == [{'value': 'independent data'}]
+
+
+def test_all_workspace_procedures_bundle_registered_schemas(tmp_path):
+    from pathlib import Path
+    import workspace
+    with ProcessResources(Factory()) as resources:
+        with Application(tmp_path, resources=resources, discover=False) as app:
+            install_workspace(tmp_path, app)
+            base = Path(workspace.__file__).parent / "resources/procedures"
+            for path in base.rglob("*.md"):
+                name = path.relative_to(base).with_suffix("").as_posix()
+                result = app.procedure(name)
+                assert "operations" in result, name
+                assert not result.get("unavailable_operations"), name
+                assert not result["content"].startswith("---"), name
+                for operation in result["operations"]:
+                    assert operation == app.registry.describe(operation["operation"])

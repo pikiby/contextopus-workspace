@@ -1,3 +1,7 @@
+---
+operations: ["core.search_event", "core.search_events", "core.search_replay", "workspace.analytics_blob_read", "workspace.analytics_evaluate", "workspace.analytics_import", "workspace.analytics_query", "workspace.analytics_read", "workspace.analytics_reference_read", "workspace.analytics_report", "workspace.audit", "workspace.history_diff", "workspace.history_index", "workspace.history_lineage", "workspace.history_read", "workspace.read", "workspace.search"]
+---
+
 # Analyze actual Contextopus operations
 
 This is the canonical analyze procedure. Obtain this procedure before analysis; call operations through `read` or `write`; prefer `workspace.<operation>`. Fetch needed references with `guide(procedure="reference/<name>")`. The short `w-analyze` skill obtains this procedure when it is not already available for the task. For knowledge quality, consistency or organization, use the audit procedure. Analysis investigates what an agent actually did and what evidence establishes it.

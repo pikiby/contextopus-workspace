@@ -87,7 +87,8 @@ class BaseContext:
             for root in sorted(self.layout.workspace_base.iterdir()):
                 if root.name.startswith('.') or root.is_symlink() or not root.is_dir():
                     continue
-                for path in (root / 'knowledge').rglob('*.md'):
+                from .context_document import record_paths
+                for path in record_paths(root):
                     if path.is_symlink() or any(p.startswith('.') for p in path.relative_to(root).parts):
                         continue
                     metadata, body = _parse(read_utf8(path))
@@ -105,7 +106,7 @@ class BaseContext:
         selected = state.get('context')
         installed = state.get('managed', {})
         return {'context': selected, 'path': str(self._context_path(selected)) if selected else None,
-                'present': bool(selected and (self._context_path(selected) / 'INSTRUCTIONS.md').is_file()),
+                'present': bool(selected and (self._context_path(selected) / 'Context.md').is_file()),
                 'installed_version': installed.get('version'), 'packaged_version': self.bundle['version'],
                 'managed_context': installed.get('context'),
                 'pending': {key: state['pending'].get(key) for key in ('revision', 'stage')} if state.get('pending') else None,
@@ -114,7 +115,7 @@ class BaseContext:
 
     def select(self, context: str):
         path = self._context_path(context)
-        if not (path / 'INSTRUCTIONS.md').is_file() or not (path / 'knowledge').is_dir():
+        if not (path / 'Context.md').is_file() or not (path / 'knowledge').is_dir():
             raise PCWError('Select an existing Workspace context')
         with self.layout.guard():
             state = self._read()
@@ -144,6 +145,19 @@ class BaseContext:
             conflicts.append({'reason': 'instructions_missing', 'path': str(instructions_path),
                               'incoming': self.bundle['instructions']})
         instructions = read_utf8(instructions_path) if instructions_hash else self.bundle['instructions']
+        context_path = root / 'Context.md'
+        if managed and context_path.is_file():
+            from contextopus.core.documents.instructions import InstructionLibrary
+            metadata, _ = _parse(read_utf8(context_path))
+            references = metadata.get('instructions', {})
+            try:
+                store = InstructionLibrary(self.layout)
+                required = store.resolve(list(references.values()))
+                instructions = store.read(references['workspace'])['content']
+                instructions_hash = required['revision']
+                conflicts = [item for item in conflicts if item['reason'] != 'instructions_missing']
+            except (ValueError, OSError, KeyError) as exc:
+                conflicts.append({'reason': 'instructions_missing', 'path': str(context_path), 'error': str(exc)})
         if create:
             from .configuration import WORKSPACE_CREATION_DEFAULTS
             settings = {**WORKSPACE_CREATION_DEFAULTS, **self.bundle.get('settings', {})}

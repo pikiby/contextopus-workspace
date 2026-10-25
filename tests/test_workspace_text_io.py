@@ -80,7 +80,7 @@ def test_unicode_root_upgrade_receipt_replays_after_reopen(tmp_path):
         assert reopened.upgrade_apply(revision, automatic=True)["replayed"] is True
         from workspace.policies import extract_settings
         assert reopened.instructions_read()["content"] == extract_settings(rules)[1]
-        assert reopened.upgrade_plan()["from_version"] == 5
+        assert reopened.upgrade_plan()["from_version"] == 6
     finally:
         reopened.close()
 
@@ -100,7 +100,7 @@ def test_windows_migration_transforms_match_posix_manifest_keys(tmp_path, monkey
         assert transforms
         assert all("\\" not in item["path"] for item in transforms.values())
         assert all(
-            item["path"].startswith("knowledge/") for item in transforms.values()
+            item["path"] == "Context.md" or item["path"].startswith("knowledge/") for item in transforms.values()
         )
     finally:
         runtime.close()

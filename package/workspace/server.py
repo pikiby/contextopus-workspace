@@ -23,7 +23,7 @@ mcp = FastMCP(
         "For an unknown signature, use pcw_query(operation='describe', arguments={'operation': '<name>'}); "
         "describe with empty arguments lists operation names and their entrypoints. "
         "Keep the context selected by the user; ask if ambiguous. Creation or switching requires clear user direction. "
-        "Follow the relevant Workspace procedure through w. Read INSTRUCTIONS.md as the authoritative workspace rules, "
+        "Follow the relevant Workspace procedure through w. Read Context.md and all instructions bound by its YAML mapping as the authoritative workspace rules, "
         "then the project record and relevant typed records. Independent reading needs no cycle. On format incompatibility "
         "immediately use the upgrade procedure, then resume; do not create replacement storage or wait for another migration request. "
         "Contexts under one memory root share an index. Search categories or all_categories without changing active rules. "

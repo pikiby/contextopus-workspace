@@ -1,3 +1,7 @@
+---
+operations: ["workspace.list", "workspace.read", "workspace.read_many"]
+---
+
 # Required source reading
 
 This is an agent procedure, not a plugin fetcher or proof that a request occurred. Authoring criteria belong to the selected complete INSTRUCTIONS; effective `create_required_sources` controls authoring; they are not inferred from ordinary citations. Existing marked sources are mandatory regardless of that setting, including in older contexts.

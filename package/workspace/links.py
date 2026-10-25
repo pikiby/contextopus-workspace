@@ -107,3 +107,57 @@ class LinkCodec:
         aliases = self.display_aliases(metadata.get("links", []), own_id)
         metadata["links"] = self.decode(metadata.get("links", []), own_id, source_workspace)
         return (render_codec or self).record_text(metadata, body, aliases=aliases)
+
+
+def retarget_references(body, own_id, old_codec, new_codec):
+    """Retarget explicit native links only; retain labels, anchors and wrappers."""
+    import re
+    from urllib.parse import quote, unquote
+
+    def target(value, wiki=False):
+        raw = unquote(value)
+        base, sep, anchor = raw.partition("#")
+        if not base or "://" in base or base.startswith(("#", "mailto:")):
+            return value
+        candidates = [base]
+        if not base.endswith(".md"):
+            candidates.append(base + ".md")
+        parent = PurePosixPath(old_codec.paths.get(own_id, "")).parent
+        matches = set()
+        for candidate in candidates:
+            matches.update(old_codec.by_path.get(candidate, []))
+            matches.update(old_codec.by_path.get(posixpath.normpath(str(parent / candidate)), []))
+        if wiki and not matches:
+            aliases = getattr(old_codec, "_reference_aliases", None)
+            if aliases is None:
+                aliases = {}
+                for path, ids in old_codec.by_path.items():
+                    parts = PurePosixPath(path).parts
+                    for offset in range(len(parts)):
+                        aliases.setdefault("/".join(parts[offset:]), set()).update(ids)
+                old_codec._reference_aliases = aliases
+            for candidate in candidates:
+                matches.update(aliases.get(candidate, ()))
+        if len(matches) != 1:
+            return value
+        ident = next(iter(matches))
+        if ident not in new_codec.paths:
+            return value
+        old, new = old_codec.paths[ident], new_codec.paths[ident]
+        source_moved = old_codec.paths.get(own_id) != new_codec.paths.get(own_id)
+        if old == new and not source_moved:
+            return value
+        if wiki:
+            rewritten = new if base.endswith(".md") else new.removesuffix(".md")
+        else:
+            source_parent = PurePosixPath(new_codec.paths.get(own_id, "")).parent
+            rewritten = quote(posixpath.relpath(new, str(source_parent)), safe="/._-~")
+        return rewritten + (sep + anchor if sep else "")
+
+    def wiki(match):
+        reference, sep, label = match[1].partition("|")
+        return "[[" + target(reference, True) + (sep + label if sep else "") + "]]"
+
+    body = re.sub(r"\[\[([^]\n]+)\]\]", wiki, body)
+    return re.sub(r"(\[[^]\n]*\]\()([^\s)\n]+)(\))",
+                  lambda match: match[1] + target(match[2]) + match[3], body)

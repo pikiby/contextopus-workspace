@@ -7,7 +7,7 @@ coding clients use the same operations and storage.
 
 The examples below are **EXAMPLE prompts and synthetic records**, not a claim
 that these projects or results exist in your installation. Replace `release-tools`
-with the context you chose. Use `$w-search` in Codex, `/w-search` in Claude Code
+with the context you chose. Use `$workspace-search` in Codex, `/workspace-search` in Claude Code
 or Hermes, or your client's native skill mechanism; see
 [client invocation and setup](https://github.com/pikiby/contextopus-core/blob/main/docs/integrations.md#invoke-the-installed-skills).
 

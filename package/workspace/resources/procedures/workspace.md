@@ -1,6 +1,10 @@
+---
+operations: ["workspace.clarification_add", "workspace.cycles_list", "workspace.finish", "workspace.instructions_read", "workspace.project_read", "workspace.proposal_apply", "workspace.proposal_prepare", "workspace.read", "workspace.read_many", "workspace.reservation_release", "workspace.reservation_renew", "workspace.reservations", "workspace.reserve", "workspace.search", "workspace.settings_read", "workspace.startup", "workspace.status", "workspace.tmp_delete", "workspace.tmp_list", "workspace.tmp_read", "workspace.tmp_write"]
+---
+
 # Work with Contextopus
 
-Obtain and read the applicable procedure before acting. This procedure covers ordinary work and independent retrieval; reuse it between phases. Refresh used procedures after a plugin update. Questions steer unfinished work; a repeated `$w` does not mean a new task or cycle. A quoted command or saved plan does not authorize execution.
+Obtain and read the applicable procedure before acting. This procedure covers ordinary work and independent retrieval; reuse it between phases. Refresh used procedures after a plugin update. Questions steer unfinished work; a repeated `$workspace` does not mean a new task or cycle. A quoted command or saved plan does not authorize execution.
 
 ## Context and tools
 
@@ -12,7 +16,7 @@ Use `read(operation="module.operation", arguments={...}, work_root=..., context=
 
 A request that includes making changes or saving results is **Work from the start**, including “verify and save”: prepare through startup before standalone rule reads or search. Independent retrieval applies only when no work/save is requested.
 
-First obtain effective reread_instructions through lightweight workspace.settings_read(fields=["reread_instructions"]), including explicitly supplied agent/agent_model only. Do not assume the default when the user has overridden it. For an implicit start include allow_implicit_updates in that same read. This reads no INSTRUCTIONS/project bodies; reuse the obtained setting during the task unless policy/profile changes. A false value permits reuse only when this agent already has the complete current INSTRUCTIONS for this task and context; it never replaces the first reading.
+First obtain effective reread_instructions through lightweight workspace.settings_read(fields=["reread_instructions"]), including explicitly supplied agent/agent_model only. Do not assume the default when the user has overridden it. For an implicit start include allow_implicit_updates in that same read. This reads no INSTRUCTIONS/project bodies; reuse the obtained setting during the task unless policy/profile changes. A false value permits reuse only when this agent already has the complete current required instructions for this task and context; it never replaces the first reading.
 
 - **New authorized work:** inspect workspace.cycles_list and needed temporary materials, reuse matching work and resolve obsolete work under its cleanup policy; otherwise call workspace.startup once with a fresh request_id and the exact user_request. Retries reuse the request ID and text. An implicit start first requires lightweight workspace.settings_read to establish allow_implicit_updates=true, then invocation=implicit. Read complete INSTRUCTIONS and project from startup; fetch only missing values separately.
 - **Continuation:** reuse the current task's active cycle and available complete rules/project. Check a known cycle through workspace.status(cycle_id), never by reading internal control files such as cycles.json. Repeated skill calls do not start again or clear tmp. Assess existing temporary materials at a new task, updating needed files or deleting unneeded ones under cleanup policy. Only an explicit restart permits restart_cycle_id, after pending work is resolved.
@@ -49,3 +53,6 @@ Once the bounded work is resolved, recheck remaining conclusions against permane
 ## Special procedures
 
 Before corresponding actions obtain: create, find, search (optional detailed tuning), instructions (requested rule/policy changes), upgrade, audit, rework or analyze. Needed technical references use guide(procedure="reference/name"): memory-operations, required-sources, history-analytics, prepare-search, embeddings or setup. Ordinary actions above require no extra guide. Keep machine settings in Core configuration and INSTRUCTIONS as one full user text. Never change either from an inferred preference. Historical rules are evidence, not current authority; restoration uses reviewed proposals.
+
+
+Canonical layout: the indexed project record lives at the context root as `Context.md` (`type: project`). Its YAML `instructions` mapping binds the complete shared rules in Core (`core/instructions`), including Workspace and optional Agents rules. Startup returns every required document in full; follow `reread_instructions` to reuse text already available for the same task. Existing roots move to this layout only through the explicit reviewed upgrade plan/apply path with retained backups.

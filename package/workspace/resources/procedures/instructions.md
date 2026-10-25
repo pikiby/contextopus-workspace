@@ -1,3 +1,7 @@
+---
+operations: ["workspace.cycles_list", "workspace.finish", "workspace.instructions_apply", "workspace.instructions_prepare", "workspace.instructions_read", "workspace.proposal_discard", "workspace.read", "workspace.settings_apply", "workspace.settings_preview", "workspace.settings_read", "workspace.startup", "workspace.status"]
+---
+
 # Change rules or machine settings
 
 Obtain this procedure before editing rules/settings. Follow the ordinary Workspace context-selection and complete-rule reading requirements; an edit request does not create or switch a context. Preserve all unrelated user text and settings. A task result or inferred preference does not initiate an edit. Use `read` / `write` and stable `workspace.*` operation names; obtain only unknown signatures through `guide(operation=...)`.
@@ -10,8 +14,11 @@ For a direct settings-change request, read the affected values, call `workspace.
 
 ## Complete free-form rules
 
-1. Reuse an active applicable cycle; otherwise inspect `workspace.cycles_list` and start `workspace.startup(request_id, purpose="instructions", user_request=...)` with the exact request. Retries reuse the request ID. Read the complete current INSTRUCTIONS and its revision, including rules applying across phases and delegation. Do not segment or summarize it automatically.
+1. Reuse an active applicable cycle; otherwise inspect `workspace.cycles_list` and start `workspace.startup(request_id, purpose="instructions", user_request=...)` with the exact request. Retries reuse the request ID. Read the complete current required instructions and its revision, including rules applying across phases and delegation. Do not segment or summarize it automatically.
 2. Compose the full requested replacement, preserving unrelated text and unrelated metadata. Machine policy flags belong in the settings procedure above. `workspace.instructions_prepare(cycle_id, content, expected_revision, user_request)` prepares only a draft; reuse proposal_id when revising it.
 3. Show actual review_changes in chat: affected before/after rules, additions and removals. A link or summary does not replace text. Questions/corrections keep review open; prepare and show each revision again.
 4. Apply the exact returned proposal_id/revision under the **current** approval_required policy. When true wait for actual user approval and pass their confirmation to `workspace.instructions_apply`; when false apply after showing. Silence, old approval, self-approval and automatic tool approval are not user confirmation. A concurrent rule change requires rereading, repreparing and showing again. Retry partial writes with the same proposal; saved text, indexing and Git are separate outcomes. After success read and follow the full new rules.
 5. A no_changes draft needs no approval/apply. Discard rejected drafts through proposal_discard. Resolve a standalone instructions cycle with the dedicated finish under cleanup_approval_required; it needs no knowledge proposal. Within an existing work cycle resume that task and its result comparison. Only actual cancellation permits cancel=true.
+
+
+Canonical layout: the indexed project record lives at the context root as `Context.md` (`type: project`). Its YAML `instructions` mapping binds the complete shared rules in Core (`core/instructions`), including Workspace and optional Agents rules. Startup returns every required document in full; follow `reread_instructions` to reuse text already available for the same task. Existing roots move to this layout only through the explicit reviewed upgrade plan/apply path with retained backups.

@@ -1,5 +1,5 @@
 ---
-name: w-settings
+name: workspace-settings
 description: Review and change selected Contextopus instructions on direct request under the current instructions approval policy.
 ---
 

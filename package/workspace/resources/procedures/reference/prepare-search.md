@@ -1,3 +1,7 @@
+---
+operations: ["workspace.reconcile", "workspace.status", "workspace.switch_embeddings"]
+---
+
 # Automatic indexing
 
 Applying a proposal under the workspace's approval policy automatically tokenizes new or changed Markdown topics, embeds overlapping windows and updates LanceDB. Tmp returns and prepared proposals are not indexed. The agent supplies each proposed body during preparation; application uses that exact stored body without retransmission. No semantic helper, boundary arrays or splitting assignment exists.

@@ -1,3 +1,7 @@
+---
+operations: ["core.index_upgrade", "core.relocation_apply", "core.relocation_plan", "core.relocation_rollback", "core.status", "workspace.list", "workspace.proposal_apply", "workspace.proposal_prepare", "workspace.read", "workspace.status", "workspace.upgrade_apply", "workspace.upgrade_plan"]
+---
+
 # Upgrade PCW installation, data and skills
 
 This is the canonical Workspace upgrade procedure. It covers the old installation, selected data roots, context formats and host skills. Fetch needed procedures through `guide(procedure=...)`; use `guide(operation=...)` only for unknown signatures. An upgrade does not authorize substantive changes to project knowledge or instructions.
@@ -30,7 +34,7 @@ Use the destination explicitly for subsequent requests and run `core.index_upgra
 
 Install native per-user autostart with `contextopus --root <new root> service install`, then verify the single owner. `service start/stop/restart/status` and the TUI use the same lifecycle controls. Bind the persistent default with `contextopus root --set <new root>`; also pass the exact destination during rollout verification. Do not infer a shared Workspace selection from a process/session ID.
 
-Choose and preserve one Codex delivery mode. For literal `$w`, `$w-search`, `$w-create`, `$w-settings`, `$w-context`, `$w-analyze`, `$m`, use the existing direct integration:
+Choose and preserve one Codex delivery mode. For literal `$workspace`, `$workspace-search`, `$workspace-create`, `$workspace-settings`, `$workspace-context`, `$workspace-analyze`, `$m`, use the existing direct integration:
 
 ```console
 contextopus integrate codex --user
@@ -47,7 +51,7 @@ in a fresh native session. Updating this installation uses the same direct mode;
 do not turn its plugin back on as an automatic upgrade step.
 
 Optional plugin delivery exposes `contextopus:w` and corresponding namespaced
-skills, rather than literal bare `$w`. If that mode is explicitly chosen, use
+skills, rather than literal bare `$workspace`. If that mode is explicitly chosen, use
 supported native commands after checking the installed CLI's help:
 
 ```console
@@ -92,3 +96,6 @@ After an authorized package update, refresh managed skills and the used procedur
 The upgrade plan detects normalized context-name collisions and permanent references to temporary data as explicit blockers. Do not silently merge contexts or remove useful information to make migration pass. Preserve instructions, six existing policy choices, user tags, original cycles and immutable proposal/review bytes. The new independent cleanup_approval_required setting defaults to true where absent.
 
 Convert tmp to .tmp and temporary Markdown to readable cards with stable YAML IDs. Rewrite temporary references and retained path mappings; a pending permanent proposal keeps its original approval revision, with technical overlays applied only when resumed. Add owner-derived context/<name> tags while preserving unrelated tags. Check both saved card metadata and the shared index. Retry the retained migration receipt after interruption; keep snapshots until preservation is verified. No old work is applied, cancelled or purged by the format transition.
+
+
+Canonical layout: the indexed project record lives at the context root as `Context.md` (`type: project`). Its YAML `instructions` mapping binds the complete shared rules in Core (`core/instructions`), including Workspace and optional Agents rules. Startup returns every required document in full; follow `reread_instructions` to reuse text already available for the same task. Existing roots move to this layout only through the explicit reviewed upgrade plan/apply path with retained backups.

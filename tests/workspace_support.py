@@ -34,3 +34,27 @@ def prepare_workspace_storage(root):
     plan = store.storage_prepare()
     if plan['needs_migration']:
         store.storage_apply(plan['revision'])
+
+
+def reconstruct_legacy_rules(runtime, text=None):
+    """A pre-v6 fixture has local rules and no per-context shared instruction."""
+    from workspace.context_document import library, instruction_name
+    from workspace.runtime import _parse
+    from workspace.records import record_text
+    store = library(runtime)
+    try:
+        document = store.read(instruction_name(runtime.engine.workspace))
+    except FileNotFoundError:
+        document = None
+    if text is None:
+        text = document['content'] if document else runtime.instructions_read()['content']
+    (runtime.engine.root / 'INSTRUCTIONS.md').write_bytes(text.encode('utf-8'))
+    if (runtime.engine.root / '.git').is_dir():
+        runtime._history_git('update-index', '--no-skip-worktree', '--', 'INSTRUCTIONS.md', check=False)
+    if document:
+        (store.root / document['path']).unlink()
+    context = runtime.engine.root / 'Context.md'
+    if context.is_file():
+        metadata, body = _parse(context.read_bytes().decode('utf-8'))
+        metadata.pop('instructions', None)
+        context.write_bytes(record_text(metadata, body).encode('utf-8'))

@@ -1,3 +1,7 @@
+---
+operations: ["workspace.analytics_blob_read", "workspace.analytics_evaluate", "workspace.analytics_import", "workspace.analytics_migrate", "workspace.analytics_query", "workspace.analytics_read", "workspace.analytics_reference_read", "workspace.analytics_report", "workspace.history_changes", "workspace.history_diff", "workspace.history_index", "workspace.history_lineage", "workspace.history_list", "workspace.history_read", "workspace.history_retry", "workspace.history_search", "workspace.read", "workspace.search"]
+---
+
 # History and analytics
 
 ## Capture and provenance

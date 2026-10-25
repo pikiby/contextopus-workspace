@@ -10,8 +10,6 @@ import pytest
 
 from contextopus.integrations import autostart, service
 from contextopus.integrations.native import plan, integrate, IntegrationConflict, _digest
-from contextopus.interfaces.tui.backend import Backend
-from contextopus.interfaces.tui.render import action_names
 
 
 
@@ -47,5 +45,5 @@ def test_upgrade_removes_only_managed_retired_skills_and_rejects_stale_plan(tmp_
     old.write_bytes(managed_content)
     result = integrate(preview)
     assert not old.exists() and modified.read_text() == "My custom rework"
-    assert set(path.name for path in root.iterdir()) == {"w", "w-search", "w-create", "w-settings", "w-context", "w-analyze", "m", "wr"}
+    assert set(path.name for path in root.iterdir()) == {"contextopus-workspace", "contextopus-workspace-search", "contextopus-workspace-create", "contextopus-workspace-settings", "contextopus-workspace-context", "contextopus-workspace-analyze", "contextopus-modules", "wr"}
     assert result["removed"] == [str(old)]

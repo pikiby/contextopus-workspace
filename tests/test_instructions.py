@@ -6,6 +6,12 @@ from pcw_runtime import PCWError
 from pcw_runtime.cycles import CycleRuntime
 from test_cycles import workspace
 from test_runtime import Factory
+from workspace.context_document import library
+
+def external_rules(r, text):
+    store = library(r)
+    doc = store.read("workspace." + r.engine.workspace)
+    return store.save(doc["path"], doc["metadata"], text, doc["revision"])
 
 
 def edit(r, c, text, proposal_id=None):
@@ -63,7 +69,7 @@ def test_prepare_waits_for_approval_and_keeps_arbitrary_markdown_exact(workspace
     with pytest.raises(PCWError, match="confirmation"):
         r.instructions_apply(c, p["proposal_id"], p["revision"], "")
     assert apply(r, c, p)["status"] == "applied"
-    assert (r.engine.root / "INSTRUCTIONS.md").read_bytes() == text.encode()
+    assert r.instructions_read()["content"].encode() == text.encode()
     assert r.instructions_read(c)["content"] == text
     assert apply(r, c, p)["replayed"]
     assert f.calls == [] and r.status(c)["materials"] == 1
@@ -79,7 +85,7 @@ def test_revised_draft_and_external_edit_reject_old_approval(workspace):
     q = edit(r, c, "second", p["proposal_id"])
     with pytest.raises(PCWError, match="exact presented"):
         apply(r, c, p)
-    (r.engine.root / "INSTRUCTIONS.md").write_text("Human's newer rules")
+    external_rules(r, "Human's newer rules")
     with pytest.raises(PCWError, match="Instructions conflict"):
         apply(r, c, q)
     assert r.instructions_read(c)["content"] == "Human's newer rules"
@@ -124,7 +130,7 @@ def test_rejection_and_unchanged_instructions_need_no_knowledge_write(workspace)
     b = r.startup("b", purpose="instructions")["cycle_id"]
     assert edit(r, b, old["content"])["status"] == "no_changes"
     assert r.finish(b)["status"] == "closed"
-    assert f.calls == [] and (r.engine.root / "INSTRUCTIONS.md").read_text() == old["content"]
+    assert f.calls == [] and r.instructions_read()["content"] == old["content"]
 
 
 def test_instruction_edit_does_not_cover_work_review_or_cross_apply(workspace):
@@ -157,19 +163,19 @@ def test_partial_write_can_retry_but_cannot_overwrite_a_later_edit(workspace):
     r, _ = workspace
     c = r.startup("edit", purpose="instructions")["cycle_id"]
     p = edit(r, c, "New instructions")
-    write = r.engine._write
-    def fail_after_write(path, text):
-        write(path, text)
-        if path.name == "INSTRUCTIONS.md":
-            raise OSError("interrupted after durable write")
-    with patch.object(r.engine, "_write", side_effect=fail_after_write):
+    store_type = type(library(r))
+    write = store_type.save
+    def fail_after_write(store, *args, **kwargs):
+        write(store, *args, **kwargs)
+        raise OSError("interrupted after durable write")
+    with patch.object(store_type, "save", fail_after_write):
         assert apply(r, c, p)["status"] == "partial"
     assert r.finish(c)["status"] == "blocked"
     assert apply(r, c, p)["status"] == "applied"
     q = edit(r, c, "Another revision")
-    with patch.object(r.engine, "_write", side_effect=fail_after_write):
+    with patch.object(store_type, "save", fail_after_write):
         assert apply(r, c, q)["status"] == "partial"
-    (r.engine.root / "INSTRUCTIONS.md").write_text("Manual newer revision")
+    external_rules(r, "Manual newer revision")
     with pytest.raises(PCWError, match="conflict"):
         apply(r, c, q)
 
@@ -177,17 +183,17 @@ def test_partial_write_can_retry_but_cannot_overwrite_a_later_edit(workspace):
 def test_missing_instructions_are_not_reset_and_symlinks_are_rejected(workspace, tmp_path):
     r, _ = workspace
     c = r.startup("first")["cycle_id"]
-    path = r.engine.root / "INSTRUCTIONS.md"
+    path = library(r).root / ("workspace." + r.engine.workspace + ".md")
     path.unlink()
-    with pytest.raises(PCWError, match="missing"):
+    with pytest.raises(PCWError, match="[Mm]issing"):
         r.startup("second")
-    with pytest.raises(PCWError, match="missing"):
+    with pytest.raises(PCWError, match="[Mm]issing"):
         r.instructions_read(c)
     assert not path.exists()
     outside = tmp_path / "outside.md"
     outside.write_text("keep")
     path.symlink_to(outside)
-    with pytest.raises(PCWError, match="Symlinks"):
+    with pytest.raises(PCWError, match="[Ss]ymlinks"):
         r.startup("third")
     assert outside.read_text() == "keep"
 

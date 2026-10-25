@@ -95,7 +95,8 @@ def test_sparse_legacy_needs_reviewed_rules_preserves_originals(
         assert (runtime.engine.root / ".tmp/result.md").read_bytes() == expected_tmp
         assert (Path(result["backup"]) / "tmp/result.md").read_bytes() == expected_tmp
         assert not (runtime.engine.root / "tmp").exists()
-        assert runtime.project_read()["status"] == "missing"
+        assert runtime.project_read()["path"] == "Context.md"
+        assert runtime._project_description_status()["status"] == "placeholder"
         material = next(m for m in runtime.list()["materials"] if m["type"] == "knowledge")
         assert (
             runtime.read(material_id=material["id"])["content"]
@@ -167,7 +168,7 @@ def test_case_insensitive_current_alias_is_migrated_once(tmp_path, monkeypatch):
         transformed, _ = runtime._v2_transforms(0)
         tasks = [item for item in transformed.values() if _parse(item['text'])[0]['type'] == 'task']
         assert len(tasks) == 1
-        assert set(transformed) == {'knowledge/topic.md', 'current.md'}
+        assert set(transformed) == {'knowledge/topic.md', 'current.md', 'Context.md'}
         assert 'original ongoing task' in tasks[0]['text']
         assert actual.read_bytes() == b'original ongoing task\r\n'
     finally:

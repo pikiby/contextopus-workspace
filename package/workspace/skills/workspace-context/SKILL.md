@@ -1,5 +1,5 @@
 ---
-name: w-context
+name: workspace-context
 description: Find Contextopus projects by name, path or meaning before choosing a context.
 ---
 

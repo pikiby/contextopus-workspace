@@ -1,3 +1,4 @@
+from workspace_support import reconstruct_legacy_rules
 """Exercise the shipped Workspace, not the retained PCW compatibility package."""
 from importlib.resources import files
 import json
@@ -22,6 +23,7 @@ def test_recovers_interrupted_preceding_format_before_v3(tmp_path, interruption,
     runtime = workspace(tmp_path)
     root = runtime.engine.root
     project = runtime.project_read()
+    reconstruct_legacy_rules(runtime)
     (root / project["path"]).unlink()
     (root / "PROJECT.md").write_bytes(project["content"].encode("utf-8"))
     source = "# Important fact\nPreserve this identity\n".replace("\n", line_ending)
@@ -107,12 +109,13 @@ def test_migrate_current_preserves_ids_pending_proposal_and_retry(tmp_path, line
     project = runtime.project_read()
     # Reconstruct the machine flags and proposal contract a real pre-v4 context used.
     rules = runtime.engine.root / "INSTRUCTIONS.md"
-    rules_text = "---\n" + yaml.safe_dump(runtime._policies()) + "---\n" + _parse(rules.read_bytes().decode("utf-8"))[1]
+    rules_text = "---\n" + yaml.safe_dump(runtime._policies()) + "---\n" + runtime.instructions_read()["content"]
     rules_text = rules_text.replace("\n", line_ending)
-    rules.write_bytes(rules_text.encode("utf-8"))
+    reconstruct_legacy_rules(runtime, rules_text)
     with runtime._cycle(cycle) as (records, state):
         old = runtime._load_plan(cycle, proposal["proposal_id"], state["proposals"][proposal["proposal_id"]])
         old.pop("settings_revision", None)
+        old.pop("required_instructions_revision", None)
         # A real pre-v4 proposal predates edit ownership.
         runtime._edits().release(cycle)
         old.pop("edit_reservations", None)
@@ -197,6 +200,7 @@ def test_interrupted_migration_resumes_and_preserves_legacy_project_approval(tmp
     runtime = workspace(tmp_path)
     cycle = runtime.startup("change-project")["cycle_id"]
     before = runtime.project_read()
+    reconstruct_legacy_rules(runtime)
     root = runtime.engine.root
     legacy_body = before["content"].replace("\n", line_ending)
     (root / "PROJECT.md").write_bytes(legacy_body.encode("utf-8"))
@@ -233,6 +237,7 @@ def test_interrupted_migration_resumes_and_preserves_legacy_project_approval(tmp
 def test_migration_review_rejects_newline_only_source_change(tmp_path):
     runtime = workspace(tmp_path)
     project = runtime.project_read()
+    reconstruct_legacy_rules(runtime)
     root = runtime.engine.root
     legacy = root / "PROJECT.md"
     legacy.write_bytes(project["content"].encode("utf-8"))

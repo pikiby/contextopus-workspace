@@ -89,7 +89,9 @@ class MigrationIdentity:
             marker = control / 'format.json'
             runtime.engine._assert_safe(marker)
             version = json.loads(read_utf8(marker)).get('format_version', 0) if marker.is_file() else 0
-            receipt = control / 'migration-v5.json'
+            receipt = control / 'migration-v6.json'
+            if not receipt.is_file():
+                receipt = control / 'migration-v5.json'
             if not receipt.is_file():
                 receipt = control / 'migration-v4.json'
             runtime.engine._assert_safe(receipt)
@@ -105,9 +107,8 @@ class MigrationIdentity:
                         raise PCWError('Conflicting retained legacy identity maps')
                     self.retained[key] = item
             self.fingerprints[root.name] = {'format': version, 'files': {}, 'retained_identity_revision': retained_revision}
-            for path in sorted((root / 'knowledge').rglob('*.md')):
-                if any(p.startswith('.') for p in path.relative_to(root / 'knowledge').parts):
-                    continue
+            from .context_document import record_paths
+            for path in record_paths(root):
                 runtime.engine._assert_safe(path)
                 text = read_utf8(path)
                 metadata, body = _parse(text)
@@ -194,6 +195,39 @@ class MigrationIdentity:
 
 
 class MigrationLinkCodec(LinkCodec):
+    def enable_historical_paths(self):
+        """Exact completed-receipt aliases, only for immutable proposal snapshots."""
+        identity = self.identity
+        if not hasattr(identity, '_historical_native_paths'):
+            aliases = {}
+            for workspace in identity.fingerprints:
+                control = control_store(identity.runtime.engine.work_root, workspace).root
+                for version in (2, 3, 4, 5, 6):
+                    receipt = control / f'migration-v{version}.json'
+                    identity.runtime.engine._assert_safe(receipt)
+                    if not receipt.is_file():
+                        continue
+                    operation = json.loads(read_utf8(receipt))
+                    if operation.get('status') != 'complete':
+                        continue
+                    for source, transform in operation.get('transforms', {}).items():
+                        ident = transform.get('id')
+                        ident = identity.aliases.get(workspace, {}).get(ident, ident)
+                        if ident not in identity.catalog or identity.owners[ident] != workspace:
+                            continue
+                        for relative in (source, transform.get('path')):
+                            if not isinstance(relative, str):
+                                continue
+                            path = Path(relative)
+                            if path.is_absolute() or '..' in path.parts or path.suffix != '.md':
+                                raise PCWError('Invalid historical migration path')
+                            full = (identity.runtime.engine.layout.workspace_base / workspace / path).relative_to(self.vault_root).as_posix()
+                            aliases.setdefault(full, set()).add(ident)
+            identity._historical_native_paths = aliases
+        for path, targets in identity._historical_native_paths.items():
+            self.by_path[path] = list(dict.fromkeys([*self.by_path.get(path, []), *sorted(targets)]))
+        return self
+
     def __init__(self, identity, catalog, owners):
         self.identity = identity
         super().__init__(identity.runtime.engine.work_root, catalog, owners)
@@ -236,16 +270,17 @@ def catalog_fingerprints(runtime):
         marker = control_store(runtime.engine.work_root, root.name).root / 'format.json'
         runtime.engine._assert_safe(marker)
         version = json.loads(read_utf8(marker)).get('format_version', 0) if marker.is_file() else 0
-        receipt = marker.parent / 'migration-v5.json'
+        receipt = marker.parent / 'migration-v6.json'
+        if not receipt.is_file():
+            receipt = marker.parent / 'migration-v5.json'
         if not receipt.is_file():
             receipt = marker.parent / 'migration-v4.json'
         runtime.engine._assert_safe(receipt)
         retained_revision = (_revision(json.dumps(json.loads(read_utf8(receipt)).get('identity_map', []), sort_keys=True))
                              if receipt.is_file() else None)
         files = {}
-        for path in sorted((root / 'knowledge').rglob('*.md')):
-            if any(p.startswith('.') for p in path.relative_to(root / 'knowledge').parts):
-                continue
+        from .context_document import record_paths
+        for path in record_paths(root):
             runtime.engine._assert_safe(path)
             files[path.relative_to(root).as_posix()] = _revision(read_utf8(path))
         result[root.name] = {'format': version, 'file_count': len(files),
@@ -260,7 +295,9 @@ def legacy_reference(engine, ident, *, local_task=False):
     if ident is None:
         return None
     _id(ident)
-    receipt = engine.control.root / 'migration-v5.json'
+    receipt = engine.control.root / 'migration-v6.json'
+    if not receipt.is_file():
+        receipt = engine.control.root / 'migration-v5.json'
     if not receipt.is_file():
         receipt = engine.control.root / 'migration-v4.json'
     engine._assert_safe(receipt)

@@ -61,10 +61,10 @@ def event_from_plan(operation_id, plan=None, files=None):
     snapshot_ids = []
     if not plan:
         for path, text in (files or {}).items():
-            if path == ".contextopus-settings.json":
+            if path == ".contextopus-settings.json" or path.startswith(".contextopus-instructions/"):
                 continue  # Virtual historical representation has no material identity.
             snapshot_ids.append(_parse(text)[0].get("id", path.rsplit("/", 1)[-1])
-                                if path.startswith("knowledge/") else path)
+                                if path.startswith("knowledge/") or path == "Context.md" else path)
     return {"version": 1, "operation_id": operation_id, "kind": kind,
             "cycle_id": plan.get("cycle_id"), "summary": plan.get("summary"),
             "changes": changes, "snapshot_record_ids": snapshot_ids,

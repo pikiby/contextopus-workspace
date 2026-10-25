@@ -1,3 +1,7 @@
+---
+operations: ["workspace.audit", "workspace.finish", "workspace.instructions_read", "workspace.list", "workspace.project_read", "workspace.read", "workspace.settings_read", "workspace.status"]
+---
+
 Use the obtained applicable procedure before acting. Calls use `read` for queries, `write` for changes, and `guide(procedure="name")` or `guide(operation="module.operation")` for a needed procedure or unknown signature. Preserve the selected work_root/context.
 
 

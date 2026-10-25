@@ -63,6 +63,7 @@ class ProposalChange(TypedDict, total=False):
     delete: bool
     type: str
     status: str | None
+    instructions: dict[str, str]
 
 
 # The runtime guard and generated operation schema share this contract.
@@ -162,6 +163,10 @@ class CycleRuntime(
             yield records, cycle
 
     def _instructions(self, initialize=False):
+        from .context_document import read_instructions
+        current = read_instructions(self)
+        if current is not None:
+            return current
         path = self.engine.root / "INSTRUCTIONS.md"
         self.engine._assert_safe(path)
         marker = self.control.root / "instructions-initialized.json"
@@ -529,6 +534,10 @@ class CycleRuntime(
         required = plan.get(key, True)
         if state == "prepared":
             required = required or self._policies()[key]
+        if plan.get("instruction_bindings_changed"):
+            required = required or plan.get("instructions_approval_required", True)
+            if state == "prepared":
+                required = required or self._policies()["instructions_approval_required"]
         return {
             "approval_required": required,
             "next_action": "report_no_changes"
@@ -577,6 +586,7 @@ class CycleRuntime(
                 "kind": "instructions",
                 "instructions_approval_required": self._policies()["instructions_approval_required"],
                 "settings_revision": self._settings_snapshot()["revision"],
+                "required_instructions_revision": current.get("required_revision"),
                 "user_request": user_request,
                 "created_ids": {},
                 "entries": {"INSTRUCTIONS.md": {"before": before, "after": after}},
@@ -622,6 +632,9 @@ class CycleRuntime(
                     or entry["state"] == "prepared" and self._policies()["instructions_approval_required"]):
                 _text(confirmation, "current user's explicit confirmation")
             retry = entry["state"] != "prepared"
+            if (not retry and plan.get("required_instructions_revision") is not None
+                    and plan["required_instructions_revision"] != self._instructions().get("required_revision")):
+                raise PCWError("Instructions conflict: required instructions changed; prepare again")
             if not (retry and self._matches(change["after"])) and not self._matches(
                 change["before"]
             ):
@@ -629,9 +642,8 @@ class CycleRuntime(
             entry["state"] = "applying"
             self._persist(records)
             try:
-                self.engine._write(
-                    self.engine.root / "INSTRUCTIONS.md", change["after"]["text"]
-                )
+                from .context_document import save_instructions
+                save_instructions(self, change["after"]["text"])
                 if not self._matches(change["after"]):
                     raise PCWError("Instructions write verification failed")
                 history = self._history_record(
@@ -702,6 +714,8 @@ class CycleRuntime(
             previous_bindings = (self._load_plan(cycle_id, ident, cycle["proposals"][ident]).get("edit_reservations", {})
                                  if proposal_id else {})
             aliases, entries, touched = {}, {}, set()
+            instruction_binding_revisions = {}
+            instruction_bindings_changed = False
             for change in changes:
                 if not isinstance(change, dict) or set(change) - PROPOSAL_CHANGE_FIELDS:
                     raise PCWError("Unknown change fields")
@@ -743,6 +757,8 @@ class CycleRuntime(
                 if "delete" in change and type(change["delete"]) is not bool:
                     raise PCWError("delete must be a boolean")
                 if change.get("delete"):
+                    if before and before["path"] == "Context.md":
+                        raise PCWError("The canonical Context.md project cannot be deleted")
                     if set(change) - {"material_id", "expected_revision", "delete"}:
                         raise PCWError(
                             "Deletion cannot include a new body, links or path"
@@ -773,6 +789,28 @@ class CycleRuntime(
                         else:
                             metadata[field] = change[field]
                 validate_metadata(metadata)
+                if before and before["path"] == "Context.md" and metadata.get("type") != "project":
+                    raise PCWError("Context.md must remain type project")
+                if metadata.get("type") == "project":
+                    path = "Context.md"
+                    if "instructions" not in metadata:
+                        from .context_document import instruction_name
+                        metadata["instructions"] = {"workspace": "[[" + instruction_name(self.engine.workspace).removesuffix(".md") + "]]"}
+                if "instructions" in change:
+                    if metadata.get("type") != "project":
+                        raise PCWError("Only Context.md can bind required instructions")
+                    references = change["instructions"]
+                    if (not isinstance(references, dict) or "workspace" not in references
+                            or any(not isinstance(role, str) or not isinstance(ref, str)
+                                   or not ref.startswith("[[") or not ref.endswith("]]")
+                                   for role, ref in references.items())):
+                        raise PCWError("instructions must map workspace and optional roles to wikilinks")
+                    from .context_document import library
+                    resolved = library(self).resolve(list(references.values()))
+                    instruction_binding_revisions[target_id] = resolved["revision"]
+                    if references != metadata.get("instructions"):
+                        instruction_bindings_changed = True
+                    metadata["instructions"] = dict(references)
                 if "description" in change:
                     metadata["description"] = change["description"]
                 body_changed = before is None or content != _parse(before["text"])[1]
@@ -781,6 +819,8 @@ class CycleRuntime(
                 if body_changed or "description" in change:
                     validate_description(metadata, required=True)
                 if "path" in change:
+                    if metadata.get("type") == "project":
+                        raise PCWError("The canonical project path is Context.md and cannot be moved")
                     destination = self.engine._knowledge_path(change["path"])
                     path = destination.relative_to(self.engine.root).as_posix()
                     if (
@@ -927,8 +967,12 @@ class CycleRuntime(
                 "created_ids": aliases,
                 "entries": entries,
                 "instructions_revision": instructions["revision"],
+                "required_instructions_revision": instructions.get("required_revision"),
                 "settings_revision": self._settings_snapshot()["revision"],
                 "knowledge_approval_required": approval_required,
+                "instruction_bindings_changed": instruction_bindings_changed,
+                "instruction_bindings_revisions": instruction_binding_revisions,
+                "instructions_approval_required": self._policies()["instructions_approval_required"] if instruction_bindings_changed else False,
             }
             linked_ids = {target for entry in entries.values() for side in ('before', 'after')
                           for target in (entry.get(side) or {}).get('link_ids', [])}
@@ -1092,7 +1136,7 @@ class CycleRuntime(
                 changes[-1]["metadata_changes"] = {
                     key: {"before": _parse(before["text"])[0].get(key) if before else None,
                           "after": _parse(after["text"])[0].get(key) if after else None}
-                    for key in ("type", "status")
+                    for key in ("type", "status", "instructions")
                     if (_parse(before["text"])[0].get(key) if before else None) !=
                        (_parse(after["text"])[0].get(key) if after else None)
                 }
@@ -1200,6 +1244,8 @@ class CycleRuntime(
         self._edits().release(cycle_id, bindings=bindings)
 
     def _matches(self, snapshot):
+        if snapshot["path"] == "INSTRUCTIONS.md":
+            return self._instructions()["revision"] == snapshot["fingerprint"]
         path = self.engine.root / snapshot["path"]
         self.engine._assert_safe(path)
         return (
@@ -1208,6 +1254,12 @@ class CycleRuntime(
         )
 
     def _preflight(self, plan, retry):
+        for ident, expected in plan.get("instruction_bindings_revisions", {}).items():
+            after = plan["entries"][ident]["after"]
+            from .context_document import library
+            references = _parse(after["text"])[0]["instructions"]
+            if library(self).resolve(list(references.values()))["revision"] != expected:
+                raise PCWError("Required instruction target changed; prepare and present again")
         if plan.get('kind') not in {'instructions', 'project'}:
             codec = self._plan_codec(plan, 'after')
             for ident, change in plan['entries'].items():
@@ -1299,8 +1351,9 @@ class CycleRuntime(
             # new rules; otherwise a mid-recovery edit could strand partial data.
             if (
                 entry["state"] == "prepared"
-                and plan.get("instructions_revision")
-                != self._instructions()["revision"]
+                and (plan.get("instructions_revision") != self._instructions()["revision"]
+                     or (plan.get("required_instructions_revision") is not None
+                         and plan["required_instructions_revision"] != self._instructions().get("required_revision")))
             ):
                 raise PCWError(
                     "Instructions changed; read them and prepare the knowledge proposal again"
@@ -1309,7 +1362,10 @@ class CycleRuntime(
                     and plan["settings_revision"] != self._settings_snapshot()["revision"]):
                 raise PCWError("Settings changed; read settings and use proposal_prepare again")
             if (plan.get("knowledge_approval_required", True)
-                    or entry["state"] == "prepared" and self._policies()["knowledge_approval_required"]):
+                    or entry["state"] == "prepared" and self._policies()["knowledge_approval_required"]
+                    or (plan.get("instruction_bindings_changed") and
+                        (plan.get("instructions_approval_required", True) or
+                         entry["state"] == "prepared" and self._policies()["instructions_approval_required"]))):
                 _text(confirmation, "current user's explicit confirmation")
             self.engine.assert_no_foreign_incoming(
                 [i for i, e in plan["entries"].items() if e["after"] is None]
@@ -1479,7 +1535,7 @@ class CycleRuntime(
         )
 
     def checkpoint(self, cycle_id: str, paths: list[str], message: str):
-        if not paths or any(not path.startswith("knowledge/") for path in paths):
+        if not paths or any(path != "Context.md" and not path.startswith("knowledge/") for path in paths):
             raise PCWError(
                 "Only exact permanent knowledge paths may enter memory Git history"
             )

@@ -12,7 +12,8 @@ class DocumentsMixin:
                 raise PCWError("Several project descriptions exist; select and consolidate through a record proposal")
             if not items:
                 return {"status": "missing", "workspace": self.engine.workspace}
-            return {"status": "present", **self.engine._result(items[0], content=True)}
+            result = self.engine._result(items[0], content=True)
+            return {**result, "record_status": result.get("status"), "status": "present"}
 
     def record_types(self):
         self._require_format()

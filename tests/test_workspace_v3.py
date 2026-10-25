@@ -97,10 +97,10 @@ def test_legacy_migration_preserves_every_source(tmp_path):
     assert plan["project_description"]["status"] == "missing"
     result = runtime.upgrade_apply(plan["revision"], "Upgrade this workspace")
     assert result["status"] == "complete"
-    assert result["project_description"]["status"] == "missing"
+    assert result["project_description"]["status"] == "placeholder"
     replay = runtime.upgrade_apply(plan["revision"], "Retry")
     assert replay["replayed"]
-    assert replay["project_description"]["status"] == "missing"
+    assert replay["project_description"]["status"] == "placeholder"
     migrated = runtime.read(material_id=item["id"])
     assert migrated["content"] == _parse(text.decode())[1]
     assert migrated["path"] == "knowledge/Exact-facts.md"
@@ -337,12 +337,12 @@ def test_upgrade_preserves_pending_and_applied_work_and_both_backup_trees(tmp_pa
     current_plan = cold.upgrade_plan()
     assert current_plan["compatible"] and current_plan["changes"] == []
     assert current_plan["pending_work"] == plan["pending_work"]
-    assert current_plan["project_description"]["status"] == "missing"
+    assert current_plan["project_description"]["status"] == "placeholder"
     unchanged = cold._source_files(), cold._migration_tree(cold.control.root, control=True)
     current_result = cold.upgrade_apply(current_plan["revision"], "Check current context")
     assert current_result["status"] == "current"
     assert current_result["pending_work"] == plan["pending_work"]
-    assert current_result["project_description"]["status"] == "missing"
+    assert current_result["project_description"]["status"] == "placeholder"
     assert unchanged == (cold._source_files(), cold._migration_tree(cold.control.root, control=True))
     read = cold.proposal_read(pending, proposal["proposal_id"])
     assert read["revision"] == proposal["revision"] and read["approval_required"]

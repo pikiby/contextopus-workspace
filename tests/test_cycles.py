@@ -171,7 +171,7 @@ def test_apply_preserves_instructions_and_tmp_then_closure_removes_only_tmp(work
     proposal = prepare(runtime, cycle)
     assert apply(runtime, cycle, proposal)["status"] == "applied"
     assert runtime.tmp_read(cycle, b["id"])["content"].startswith("Continue B")
-    assert (runtime.engine.root / "INSTRUCTIONS.md").is_file()
+    assert runtime.instructions_read()["source_path"].startswith("core/instructions/")
     assert runtime.finish(cycle)["status"] == "closed"
     assert not runtime._tmp(cycle).exists()
     assert runtime.engine.read(proposal["created_ids"]["topic"])["content"] == "Verified fact"

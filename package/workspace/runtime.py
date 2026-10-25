@@ -294,7 +294,7 @@ class PCWRuntime:
 
     def _write(self, path: Path, text: str):
         self._assert_safe(path)
-        if path.is_relative_to(self.knowledge) and path.suffix == ".md":
+        if (path.is_relative_to(self.knowledge) or path == self.root / "Context.md") and path.suffix == ".md":
             ids = {_parse(text)[0].get("id", path.name)}
             if path.is_file():
                 ids.add(_parse(path.read_bytes().decode("utf-8"))[0].get("id", path.name))
@@ -304,7 +304,7 @@ class PCWRuntime:
         # the current migration adds owner tags after that recovery completes.
         current_format = (json.loads(read_utf8(format_path)).get("format_version", 0)
                           if format_path.is_file() else 0)
-        if current_format >= 5 and path.is_relative_to(self.knowledge) and path.suffix == ".md":
+        if current_format >= 5 and (path.is_relative_to(self.knowledge) or path == self.root / "Context.md") and path.suffix == ".md":
             from .context_identity import context_metadata
             metadata, body = _parse(text)
             if metadata.get("id"):
@@ -734,7 +734,7 @@ class PCWRuntime:
         """Observable durable boundary, including project instructions and metadata changes."""
         with self._guard():
             files = {}
-            for path in [self.root / "INSTRUCTIONS.md", *self.knowledge.rglob("*.md")]:
+            for path in [self.root / "INSTRUCTIONS.md", self.root / "Context.md", *self.knowledge.rglob("*.md")]:
                 self._assert_safe(path)
                 if path.is_file():
                     files[path.relative_to(self.root).as_posix()] = hashlib.sha256(
@@ -1464,7 +1464,7 @@ class PCWRuntime:
             namespace = self._namespace()
             # Algorithm cards are derivative data. The explicit model-apply
             # boundary refreshes them after publishing the rebuilt source index.
-            derivative = "(module = 'core' AND collection = 'search_algorithm')"
+            derivative = "(module = 'core' AND collection IN ('search_algorithm', 'instructions'))"
             if namespace and self.table.count_rows(f"NOT ({namespace}) AND (module IS NULL OR collection IS NULL OR NOT {derivative})"):
                 raise PCWError(
                     "Profile switch requires source adapters for every indexed module; non-Workspace documents are present"
@@ -1480,14 +1480,26 @@ class PCWRuntime:
 
             source = WorkspaceDocuments(self)
             signature = source.signature()
+            from contextopus.core.documents.instructions import InstructionLibrary
+            instruction_library = InstructionLibrary(self.layout)
+            instruction_snapshot = instruction_library.snapshot()
+            if (namespace and self.table.count_rows("module = 'core' AND collection = 'instructions'")
+                    and not instruction_library.root.is_dir()):
+                raise PCWError("Instruction source directory is missing; profile switch refused")
+            if not instruction_snapshot.complete or instruction_snapshot.errors:
+                raise PCWError("Instruction source is incomplete; profile switch refused")
+            def validate_sources():
+                source.validate(signature)
+                if instruction_library.snapshot() != instruction_snapshot:
+                    raise PCWError("Instructions changed during profile switch; retry from a fresh snapshot")
             result = rebuild_profile(
                 self.index,
                 previous=self.active,
                 config=config,
                 search=search_config,
                 chunking=chunking,
-                documents=source.documents(),
-                validate_snapshot=lambda: source.validate(signature),
+                documents=[*source.documents(), *instruction_snapshot.documents],
+                validate_snapshot=validate_sources,
                 read_active=lambda: json.loads(read_utf8(self.state / "active.json")),
                 write_active=self._write_active,
                 factory=self._factory,
@@ -1511,7 +1523,7 @@ class PCWRuntime:
         if not paths:
             raise PCWError("Specify exact memory files for the Git operation")
         for relative in paths:
-            if relative == "INSTRUCTIONS.md":
+            if relative in {"INSTRUCTIONS.md", "Context.md"}:
                 self._assert_safe(self.root / relative)
             elif relative.startswith("knowledge/"):
                 self._knowledge_path(relative[len("knowledge/") :])

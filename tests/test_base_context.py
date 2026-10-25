@@ -6,7 +6,7 @@ from unittest.mock import patch
 import pytest
 from workspace.base_context import BaseContext, packaged_bundle
 from workspace.cycles import CycleRuntime
-from workspace.runtime import PCWError
+from workspace.runtime import PCWError, _parse
 from workspace.text_io import read_utf8
 from test_runtime import Factory
 from workspace_support import prepare_workspace_storage
@@ -111,7 +111,7 @@ def test_unicode_neighbors_and_managed_update_ignore_implicit_locale(base, monke
         originals = {key: neighbor.read(material_id=ident) for key, ident in proposal['created_ids'].items()}
         neighbor_bytes = {neighbor.engine.root / item['path']: (neighbor.engine.root / item['path']).read_bytes()
                           for item in originals.values()}
-        neighbor_bytes[neighbor.engine.root / 'INSTRUCTIONS.md'] = (neighbor.engine.root / 'INSTRUCTIONS.md').read_bytes()
+        neighbor_bytes[base.layout.root / 'core/instructions/workspace.neighbor.md'] = (base.layout.root / 'core/instructions/workspace.neighbor.md').read_bytes()
     finally:
         neighbor.close()
 
@@ -140,7 +140,7 @@ def test_unicode_neighbors_and_managed_update_ignore_implicit_locale(base, monke
     assert reopened.plan()['status'] == 'current'
     assert reopened.plan()['plan_revision'] == initial_revision
     base_root = reopened._context_path(initial['managed']['context'])
-    initial_rules = (base_root / 'INSTRUCTIONS.md').read_bytes()
+    initial_rules = (base.layout.root / ('core/instructions/workspace.' + base_root.name + '.md')).read_bytes()
     base_settings = reopened.runtime_factory(base.layout.root, initial['managed']['context'])
     try:
         initial_settings = base_settings.settings_read()['values']
@@ -156,7 +156,8 @@ def test_unicode_neighbors_and_managed_update_ignore_implicit_locale(base, monke
     assert final.status()['context'] == 'neighbor'
     assert state['managed']['version'] == 'next-utf8-version'
     assert final.plan()['status'] == 'current'
-    assert (base_root / 'INSTRUCTIONS.md').read_bytes() == initial_rules == rules.encode('utf-8')
+    assert (base.layout.root / ('core/instructions/workspace.' + base_root.name + '.md')).read_bytes() == initial_rules
+    assert _parse(initial_rules.decode('utf-8'))[1] == rules
     runtime = final.runtime_factory(base.layout.root, state['managed']['context'])
     try:
         assert runtime.settings_read()['values'] == initial_settings
@@ -256,7 +257,7 @@ def test_preserve_custom_instructions_role_and_ids(base):
     install(base)
     initial = base._read()
     root = base._context_path(initial['managed']['context'])
-    instructions = root / 'INSTRUCTIONS.md'
+    instructions = base.layout.root / ('core/instructions/workspace.' + root.name + '.md')
     custom = instructions.read_text() + '\nCustom documentation rule\n'
     instructions.write_text(custom)
     other = base.runtime_factory(base.layout.root, 'other')
@@ -287,7 +288,7 @@ def test_stale_plan_and_unmanaged_collision(base):
 
 def test_changed_approval_requires_real_confirmation(base):
     install(base)
-    instructions = base._context_path(base.status()['context']) / 'INSTRUCTIONS.md'
+    instructions = base.layout.root / ('core/instructions/workspace.' + base.status()['context'] + '.md')
     settings(base, {'knowledge_approval_required': True})
     base.bundle['documents'][0]['content'] += '\nNew documentation\n'
     preview = base.plan()
@@ -299,7 +300,7 @@ def test_changed_approval_requires_real_confirmation(base):
 
 def test_changed_limit_needs_split_preserves_docs(base):
     install(base)
-    instructions = base._context_path(base.status()['context']) / 'INSTRUCTIONS.md'
+    instructions = base.layout.root / ('core/instructions/workspace.' + base.status()['context'] + '.md')
     settings(base, {'material_max_tokens': 20})
     custom = instructions.read_text()
     before = copy.deepcopy(base._read()['managed'])

@@ -30,6 +30,11 @@ from .temporary_migration import (
 class FormatMigrationMixin:
     def _format_problems(self, *, include_legacy_links=False):
         problems = []
+        from .context_document import bindings
+        if not (self.engine.root / "Context.md").is_file():
+            problems.append("Canonical root Context.md requires explicit migration")
+        elif bindings(self) is None:
+            problems.append("Context.md instruction bindings require explicit migration")
         text = configuration_text(self.control.layout, self.engine.workspace)
         if text is None or not set(WORKSPACE_POLICY_DEFAULTS) <= json.loads(text).keys():
             problems.append("Workspace settings require migration to Core configuration")
@@ -43,11 +48,8 @@ class FormatMigrationMixin:
         elif not (self.engine.state / "lancedb").is_dir():
             problems.append("Shared vector database is missing")
         found_ids = set()
-        for path in sorted(self.engine.knowledge.rglob("*.md")):
-            if any(
-                p.startswith(".") for p in path.relative_to(self.engine.knowledge).parts
-            ):
-                continue
+        from .context_document import record_paths
+        for path in record_paths(self.engine.root):
             self.engine._assert_safe(path)
             metadata, body = _parse(path.read_bytes().decode("utf-8"))
             if "id" not in metadata:
@@ -66,6 +68,9 @@ class FormatMigrationMixin:
             if include_legacy_links and any(not isinstance(link, str) or not link.startswith("[[")
                    for link in metadata.get("links", [])):
                 problems.append(f"Legacy navigation links in {path.name}")
+        projects = [p for p in record_paths(self.engine.root) if _parse(read_utf8(p))[0].get("type") == "project"]
+        if len(projects) != 1 or projects[0].name != "Context.md":
+            problems.append("Keep exactly one project record at root Context.md")
         if (self.engine.root / "PROJECT.md").exists() or (self.engine.root / "current").exists():
             problems.append("Legacy project/task storage remains")
         if (self.engine.root / "tmp").exists():
@@ -73,7 +78,7 @@ class FormatMigrationMixin:
         return problems
 
     def _migration_receipt_path(self):
-        path = self.control.root / "migration-v5.json"
+        path = self.control.root / "migration-v6.json"
         self.control.safe(path)
         return path
 
@@ -128,7 +133,7 @@ class FormatMigrationMixin:
         return {
             k: v
             for k, v in self._migration_tree(self.control.root, control=True).items()
-            if k not in {"migration-v3.json", "migration-v4.json", "migration-v5.json"}
+            if k not in {"migration-v3.json", "migration-v4.json", "migration-v5.json", "migration-v6.json"}
         }
 
     def _v2_transforms(self, version, identity=None):
@@ -139,11 +144,8 @@ class FormatMigrationMixin:
             aliases.update({item['old_id']: item['new_id'] for item in identity.preview()
                             if item['workspace'] == self.engine.workspace})
         indexed_paths = None
-        for path in sorted(self.engine.knowledge.rglob("*.md")):
-            if any(
-                p.startswith(".") for p in path.relative_to(self.engine.knowledge).parts
-            ):
-                continue
+        from .context_document import record_paths
+        for path in record_paths(self.engine.root):
             self.engine._assert_safe(path)
             text = path.read_bytes().decode("utf-8")
             metadata, body = _parse(text)
@@ -272,7 +274,34 @@ class FormatMigrationMixin:
                 "path": after_path,
                 "text": text,
             }
+        from .context_document import bind_project
+        projects = [item for item in transforms.values() if _parse(item["text"])[0].get("type") == "project"]
+        if len(projects) > 1:
+            raise PCWError("Several project records exist; consolidate explicitly before migration")
+        if projects:
+            project = projects[0]
+            original_codec = identity.codec()
+            project_source = next(path for path, item in transforms.items() if item is project)
+            for material in identity.catalog.values():
+                if identity.owners[material.id] == self.engine.workspace:
+                    continue
+                references = original_codec.decode(material.metadata.get("links", []), material.id)
+                if project["id"] in references and project_source != "Context.md":
+                    raise PCWError("Foreign context links to the project being moved; update that context through an explicit reviewed migration first")
+            if (self.engine.root / "Context.md").exists() and "Context.md" not in transforms:
+                raise PCWError("Context.md is occupied by an unclassified user file")
+            project["path"] = "Context.md"
+            project["text"] = bind_project(self, project["text"])
+        else:
+            if (self.engine.root / "Context.md").exists():
+                raise PCWError("Context.md is occupied by an unclassified user file")
+            ident, text = project_record(self.engine.workspace, EMPTY_PROJECT)
+            transforms["Context.md"] = {"id": ident, "before": None, "path": "Context.md", "text": bind_project(self, text)}
         old_codec, final_codec = self._migration_link_codecs(transforms)
+        from .links import retarget_references
+        for material in identity.catalog.values():
+            if identity.owners[material.id] != self.engine.workspace and retarget_references(material.content, material.id, old_codec, final_codec) != material.content:
+                raise PCWError("Foreign context body references a moved project; coordinate its explicit reviewed migration first")
         for relative, item in transforms.items():
             try:
                 item["text"] = self._normalize_snapshot(item["text"], item["id"], aliases,
@@ -316,6 +345,9 @@ class FormatMigrationMixin:
         metadata = context_metadata(metadata, self.engine.workspace)
         metadata["id"] = ident
         metadata.setdefault("type", "knowledge")
+        if metadata["type"] == "project":
+            from .context_document import instruction_name
+            metadata.setdefault("instructions", {"workspace": "[[" + instruction_name(self.engine.workspace).removesuffix(".md") + "]]"})
         validate_metadata(metadata)
         links = metadata.get("links", [])
         if not isinstance(links, list):
@@ -328,6 +360,8 @@ class FormatMigrationMixin:
                     [aliases.get(_id(i), i) for i in links])
         metadata["links"] = list(dict.fromkeys(i for i in resolved if i != ident))
         if render_codec:
+            from .links import retarget_references
+            body = retarget_references(body, ident, codec, render_codec)
             return render_codec.record_text(metadata, migrate_sources(body), aliases=display_aliases)
         return (
             "---\n"
@@ -439,6 +473,8 @@ class FormatMigrationMixin:
                     snapshots.append((ident, before, after))
                 old_codec, current_codec = self._migration_link_codecs(transforms)
                 after_source_codec, _ = self._migration_link_codecs(transforms, original_snapshots)
+                old_codec.enable_historical_paths()
+                after_source_codec.enable_historical_paths()
                 _, final_codec = self._migration_link_codecs(transforms, snapshots)
                 normalized_paths = {ident: {"before": before, "after": after} for ident, before, after in snapshots}
                 for ident, change in plan["entries"].items():
@@ -479,7 +515,7 @@ class FormatMigrationMixin:
         """Carry an already-blocked approval through a later technical upgrade."""
         key = plan["cycle_id"] + "/" + plan["proposal_id"]
         revision = _revision(encode(plan))
-        for name in ("migration-v5.json", "migration-v4.json", "migration-v3.json", "migration-v2.json"):
+        for name in ("migration-v6.json", "migration-v5.json", "migration-v4.json", "migration-v3.json", "migration-v2.json"):
             path = self.control.root / name
             self.control.safe(path)
             if not path.is_file():
@@ -492,7 +528,7 @@ class FormatMigrationMixin:
     def _execution_plan(self, plan):
         # Immutable approvals keep their original digest. Technical overlays adapt
         # paths/metadata only; they never apply a proposal during migration.
-        for name in ("migration-v5.json", "migration-v4.json", "migration-v3.json", "migration-v2.json"):
+        for name in ("migration-v6.json", "migration-v5.json", "migration-v4.json", "migration-v3.json", "migration-v2.json"):
             receipt = self.control.root / name
             self.control.safe(receipt)
             if not receipt.exists():
@@ -532,7 +568,8 @@ class FormatMigrationMixin:
             managed.add("INSTRUCTIONS.md")
             current_rules = self.engine.root / "INSTRUCTIONS.md"
             actual = read_utf8(current_rules) if current_rules.is_file() else None
-            if actual not in (transition["before"], transition["after"]):
+            allowed = (transition["before"], transition["after"], None) if operation.get("shared_instruction") else (transition["before"], transition["after"])
+            if actual not in allowed:
                 raise PCWError("Instructions changed during settings migration")
         configuration = operation.get("configuration_transition")
         if configuration and configuration_text(self.control.layout, self.engine.workspace) not in (
@@ -566,7 +603,7 @@ class FormatMigrationMixin:
                 )
             if not valid:
                 raise PCWError(f"Material changed during migration: {old_path}")
-        ignored = {"format.json", "workspace-opened.json", "migration-v3.json", "migration-v4.json", "migration-v5.json", *ignored_receipts}
+        ignored = {"format.json", "workspace-opened.json", "migration-v3.json", "migration-v4.json", "migration-v5.json", "migration-v6.json", *ignored_receipts}
         if {k: v for k, v in self._v2_control().items() if k not in ignored and not k.startswith("history/")} != {
             k: v for k, v in operation["control_sources"].items() if k not in ignored and not k.startswith("history/")
         }:
@@ -635,8 +672,10 @@ class FormatMigrationMixin:
 
     def _settings_transition(self, version, initialization):
         path = self.engine.root / "INSTRUCTIONS.md"
+        from .context_document import read_instructions
+        active_rules = read_instructions(self)
         before_rules = read_utf8(path) if path.is_file() else None
-        content = before_rules if before_rules is not None else initialization.get("content")
+        content = active_rules["content"] if active_rules else before_rules if before_rules is not None else initialization.get("content")
         if content is None:
             return None, None
         imported, after_rules = extract_settings(content)
@@ -649,12 +688,12 @@ class FormatMigrationMixin:
             imported = {key: configured.get(key, default) for key, default in WORKSPACE_POLICY_DEFAULTS.items()}
         return ({"before": before_configuration, "after": encode({**configured, **imported}),
                  "effective": imported},
-                {"before": before_rules, "after": after_rules})
+                {"before": before_rules, "after": after_rules} if not active_rules else None)
 
     def upgrade_plan(self, instructions_content: str | None = None):
         with self.control.guard():
             version = self._format()
-            if version not in (0, 1, 2, 3, 4, 5):
+            if version not in (0, 1, 2, 3, 4, 5, 6):
                 raise PCWError("Unsupported future workspace format")
             previous = self._migration_receipt_path()
             operation = json.loads(read_utf8(previous)) if previous.exists() else None
@@ -721,6 +760,15 @@ class FormatMigrationMixin:
                 configuration, instruction = self._settings_transition(version, initialization)
                 state["configuration_transition"] = configuration
                 state["instruction_transition"] = instruction
+                from .context_document import library, instruction_name, read_instructions
+                if instruction is not None and read_instructions(self) is None:
+                    try:
+                        existing = library(self).read(instruction_name(self.engine.workspace))
+                    except FileNotFoundError:
+                        existing = None
+                    if existing is not None and existing["content"] != instruction["after"]:
+                        raise PCWError("Shared instruction destination contains different user rules")
+                    state["shared_instruction"] = {"content": instruction["after"], "before_revision": existing["revision"] if existing else None}
             except (PCWError, ValueError) as exc:
                 blockers.append({"reason": str(exc)})
             transforms, aliases = ({}, {})
@@ -775,7 +823,8 @@ class FormatMigrationMixin:
                     "Preserve source/control snapshots",
                     "Migrate YAML IDs, descriptive paths and sources",
                     "Reconcile and verify the shared category index",
-                    "Move Current and PROJECT into typed records; record format 5",
+                    "Move canonical project to root Context.md; record format 6",
+                    "Copy complete rules into Core instructions and bind them through Context.md",
                     "Retain pending work and original approvals while moving tmp to .tmp with readable YAML cards",
                     "Tag permanent records with their context and reject ambiguous context names",
                     "Move legacy machine settings into Core configuration and preserve free instruction text",
@@ -897,6 +946,7 @@ class FormatMigrationMixin:
                     "instruction_initialization": initialization,
                     "configuration_transition": plan.get("configuration_transition"),
                     "instruction_transition": plan.get("instruction_transition"),
+                    "shared_instruction": plan.get("shared_instruction"),
                     "instructions_confirmation": instructions_confirmation
                     if initialization.get("required")
                     else None,
@@ -948,6 +998,10 @@ class FormatMigrationMixin:
 
             with (self.engine.state / "lock").open("a") as lock:
                 fcntl.flock(lock, fcntl.LOCK_EX)
+                shared_instruction = operation.get("shared_instruction")
+                if shared_instruction:
+                    from .context_document import ensure_instruction
+                    ensure_instruction(self, shared_instruction["content"])
                 for old_path, item in {**operation["transforms"], **operation.get("temporary_transforms", {})}.items():
                     old, new = (
                         self.engine.root / old_path,
@@ -969,8 +1023,17 @@ class FormatMigrationMixin:
                     if not rules.exists():
                         self.engine._write(rules, initialization["content"])
                 instruction = operation.get("instruction_transition")
-                if instruction:
+                if instruction and not shared_instruction:
                     self.engine._write(self.engine.root / "INSTRUCTIONS.md", instruction["after"])
+                if shared_instruction:
+                    # Backup was verified before this phase and the exact text
+                    # has been copied into Core. Remove the obsolete live address.
+                    rules = self.engine.root / "INSTRUCTIONS.md"
+                    self.engine._assert_safe(rules)
+                    if rules.exists():
+                        rules.unlink()
+                        from contextopus.core.storage import sync_directory
+                        sync_directory(rules.parent)
                 legacy_tmp = self.engine.root / "tmp"
                 if legacy_tmp.is_dir():
                     for directory in sorted((p for p in legacy_tmp.rglob("*") if p.is_dir()), key=lambda p: len(p.parts), reverse=True):

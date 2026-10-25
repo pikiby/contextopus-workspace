@@ -1,5 +1,5 @@
 ---
-name: w-search
+name: workspace-search
 description: Find and read records in selected Contextopus contexts without starting a work cycle.
 ---
 

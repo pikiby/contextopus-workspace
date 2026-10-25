@@ -5,6 +5,8 @@
 Give coding agents an evolving project memory. Keep verified facts, decisions,
 tasks and complete project instructions together; retrieve relevant knowledge by
 meaning and update it through a reviewed procedure as the project changes.
+Several sessions can work on the same project context at once, sharing current
+knowledge and rules while card reservations coordinate their edits.
 
 Workspace is an optional [Contextopus Core](https://github.com/pikiby/contextopus-core)
 module. Markdown remains readable and editable. Core supplies the shared model,
@@ -16,10 +18,10 @@ procedure for finding evidence, reviewing changes and continuing unfinished work
 
 ## Install
 
-**Workspace 1.6.0 requires Core >=1.5,<2 and Python 3.12+.** Install Core first
+**Workspace 1.7.0 requires Core >=1.7,<2 and Python 3.12+.** Install Core first
 and start its service. The selected root must match that running Core owner.
 Download and extract the [latest module ZIP](https://github.com/pikiby/contextopus-workspace/releases/latest/download/contextopus-workspace.zip)
-or the [exact 1.6.0 ZIP](https://github.com/pikiby/contextopus-workspace/releases/download/v1.6.0/contextopus-workspace-1.6.0.zip).
+or the [exact 1.7.0 ZIP](https://github.com/pikiby/contextopus-workspace/releases/download/v1.7.0/contextopus-workspace-1.7.0.zip).
 Release availability is listed on the [releases page](https://github.com/pikiby/contextopus-workspace/releases).
 If the asset is not available yet, [build it from this checkout](docs/install.md#build-from-source).
 
@@ -53,16 +55,16 @@ after installing Workspace to deliver its managed documentation context.
 
 ## Use project knowledge
 
-> Use w-context to find the project context for release verification.
+> Use workspace-context to find the project context for release verification.
 >
-> Use w-search: find the release decision, read the supporting records and check its sources.
+> Use workspace-search: find the release decision, read the supporting records and check its sources.
 >
-> Use w: verify the changed retry interval, update the existing decision and show the changes.
+> Use workspace: verify the changed retry interval, update the existing decision and show the changes.
 
-The `w` procedure connects instructions, evidence, reviewed knowledge and task
-state. `w-search` answers questions without opening a work cycle. `w-create`
-creates an explicitly requested context, `w-settings` handles requested settings
-changes and `w-analyze` investigates a bounded episode.
+The `workspace` procedure connects instructions, evidence, reviewed knowledge and task
+state. `workspace-search` answers questions without opening a work cycle. `workspace-create`
+creates an explicitly requested context, `workspace-settings` handles requested settings
+changes and `workspace-analyze` investigates a bounded episode.
 
 - Keep project rules and write destinations separate while sharing one vector index.
 - Link facts, tasks and decisions with stable IDs and descriptive Markdown filenames.
@@ -73,15 +75,21 @@ changes and `w-analyze` investigates a bounded episode.
 After enabling Workspace, preview and apply Core's native client integration to
 install its six skills. Enabling the module alone does not overwrite client files.
 [Session Search](https://github.com/pikiby/contextopus-session-search) is a separate
-module for coding-session conversations.
+module for searchable session descriptions.
 
 ## Work across sessions
 
-Several sessions can read the same context and update different records. Before
-editing a shared card, Workspace reserves it for one work cycle with a short
-explanation visible to competing agents. Related changes reserve their whole set;
-expired sessions do not keep cards occupied forever. Revision checks still protect
-against stale proposals and external file edits.
+**Work in parallel without splitting your project memory.** Give one session an
+installation task and another a documentation task: both use the same knowledge
+and rules, and their accepted updates become available to the other. Each session
+keeps its own work cycle.
+
+Workspace 1.6+ temporarily reserves the cards an agent is editing, with a short
+reason visible to other agents. Other sessions can still read, search and update
+different cards. Related edits reserve their full set; reservations are released
+after saving or expire, and revision checks reject outdated changes. Direct
+Markdown editors do not honor reservations; revision checks detect observed
+external changes.
 [Concurrent editing and recovery](docs/concurrent-editing.md).
 
 ## Develop
@@ -102,3 +110,15 @@ Only module code, installers, licenses and current guides enter the module ZIP;
 user state, repository metadata, tests and caches are excluded.
 
 Licensed under [Apache 2.0](LICENSE).
+
+## Client delivery
+
+Core 1.7 client packages share one installer and one persistent data root.
+Skills use full canonical names under the `contextopus` plugin namespace, or a
+`contextopus-` prefix for native file delivery. Short aliases are user-selected.
+See the [client package guide](https://github.com/pikiby/contextopus-core/blob/main/docs/client-packages.md)
+for package formats, setup and verification limits.
+
+## Current release
+
+[1.7.0: Shared instructions and project documents](docs/releases/1.7.0.md) · [Downloads](https://github.com/pikiby/contextopus-workspace/releases/tag/v1.7.0)

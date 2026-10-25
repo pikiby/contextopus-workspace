@@ -1,3 +1,4 @@
+from workspace_support import reconstruct_legacy_rules
 """Record-authoring and native vault-link contracts over the shipped engine."""
 
 from importlib.resources import files
@@ -323,9 +324,9 @@ def test_format_three_pending_id_graph_rename_and_new_card_survive_migration(tmp
     # Reconstruct real format-three storage and its immutable prepared proposal.
     policies = runtime._policies()
     rules_path = runtime.engine.root / "INSTRUCTIONS.md"
-    rules = "---\n" + yaml.safe_dump(policies, sort_keys=False) + "---\n" + _parse(rules_path.read_text(encoding="utf-8"))[1]
+    rules = "---\n" + yaml.safe_dump(policies, sort_keys=False) + "---\n" + runtime.instructions_read()["content"]
     # Prepared revisions must describe the bytes actually supplied by the old writer.
-    rules_path.write_text(rules, encoding="utf-8", newline="")
+    reconstruct_legacy_rules(runtime, rules)
     assert _revision(rules_path.read_bytes().decode("utf-8")) == _revision(rules)
     for material in runtime.engine.materials.values():
         text = "---\n" + yaml.safe_dump(material.metadata, sort_keys=False, allow_unicode=True) + "---\n" + material.content
@@ -385,8 +386,8 @@ def test_mcp_upgrade_copy_uses_own_vault_boundary_inside_another_vault(tmp_path,
         foreign = put(b, "# Одинаковые условия\nПроверенные условия другой категории.", path="Раздел/Условия.md")
         source = put(a, "# Наблюдение\nИспользуйте оба набора условий.", [local["id"], foreign["id"]])
         rules_path = a.engine.root / "INSTRUCTIONS.md"
-        rules = "---\n" + yaml.safe_dump(a._policies()) + "---\n" + _parse(rules_path.read_bytes().decode("utf-8"))[1]
-        rules_path.write_bytes(rules.encode("utf-8"))
+        rules = "---\n" + yaml.safe_dump(a._policies()) + "---\n" + a.instructions_read()["content"]
+        reconstruct_legacy_rules(a, rules)
         for material in a.engine.materials.values():
             metadata = copy.deepcopy(material.metadata)
             if material.id == source["id"]:

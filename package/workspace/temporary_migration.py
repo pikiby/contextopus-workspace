@@ -71,7 +71,8 @@ def temporary_transforms(runtime):
     return transforms
 
 
-def permanent_temporary_references(text, transforms, *, allow_any_transient=True, allow_malformed=False, known_cycles=(), source_path=None):
+def temporary_reference_inventory(transforms):
+    """Parse immutable temporary identity claims once per bounded scan."""
     temporary_ids, names, paths, absolute_paths = set(), set(), set(), set()
     for old, item in transforms.items():
         paths.update((old, item["path"]))
@@ -79,6 +80,11 @@ def permanent_temporary_references(text, transforms, *, allow_any_transient=True
         if Path(old).parent.name == "materials" and Path(old).suffix.casefold() == ".md":
             temporary_ids.add(_parse(item["text"])[0]["id"])
             names.update((Path(old).stem, Path(item["path"]).stem))
+    return tuple(frozenset(values) for values in (temporary_ids, names, paths, absolute_paths))
+
+
+def permanent_temporary_references(text, transforms, *, allow_any_transient=True, allow_malformed=False, known_cycles=(), source_path=None, inventory=None):
+    temporary_ids, names, paths, absolute_paths = (temporary_reference_inventory(transforms) if inventory is None else inventory)
     metadata, body = _parse(text)
     embedded, body = _parse(body)
     links = metadata.get("links", [])
@@ -138,14 +144,24 @@ def permanent_temporary_blockers(runtime, transforms):
     if transforms and hasattr(runtime, "control") and runtime.engine.root.parent.is_dir():
         roots.extend(path for path in runtime.engine.root.parent.iterdir()
                      if path != runtime.engine.root and path.is_dir() and not path.name.startswith("."))
+    inventories = {}
     for root in roots:
         inventory = global_transforms if root == runtime.engine.root else transforms
-        for path in sorted((root / "knowledge").rglob("*.md")):
+        if id(inventory) not in inventories:
+            try:
+                inventories[id(inventory)] = temporary_reference_inventory(inventory)
+            except PCWError as exc:
+                inventories[id(inventory)] = exc
+        claims = inventories[id(inventory)]
+        from .context_document import record_paths
+        for path in record_paths(root):
             runtime.engine._assert_safe(path)
             try:
+                if isinstance(claims, PCWError):
+                    raise claims
                 references = permanent_temporary_references(path.read_bytes().decode("utf-8"), inventory,
                     allow_any_transient=root == runtime.engine.root, allow_malformed=root != runtime.engine.root,
-                    known_cycles=known_cycles if root == runtime.engine.root else (), source_path=path)
+                    known_cycles=known_cycles if root == runtime.engine.root else (), source_path=path, inventory=claims)
             except (PCWError, UnicodeError) as exc:
                 blockers.append({"reason": str(exc), "workspace": root.name,
                                  "path": path.relative_to(root).as_posix()})

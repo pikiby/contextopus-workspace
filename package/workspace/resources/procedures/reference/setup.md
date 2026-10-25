@@ -1,3 +1,7 @@
+---
+operations: ["core.base_install", "core.init", "core.model_apply", "core.model_plan", "workspace.finish", "workspace.read", "workspace.recover_workspace", "workspace.startup", "workspace.status"]
+---
+
 # Runtime setup and recovery
 
 Use this reference for actual tool or embedding failures. Resolve the workspace under [Context selection](procedure:workspace); setup does not authorize creation or switching. Independent reading requires no startup. Work startup follows the selected workspace's invocation setting, uses a fresh request_id and returns instructions, project and bounded state. Retry with the same ID. Missing storage requires create or recovery as appropriate; incompatible format requires upgrade, never hidden migration. A new conversation is not a reason for diagnostics. Availability does not prove cached weights or working embeddings.

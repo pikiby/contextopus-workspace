@@ -1,7 +1,7 @@
 {
   "id": "workspace",
-  "version": "1.6.0",
-  "core_requires": ">=1.5,<2",
+  "version": "1.7.0",
+  "core_requires": ">=1.7,<2",
   "description": "Persistent project contexts, linked knowledge, task state and evidence history.",
   "contribution": {
     "factory": "workspace/__init__.py:register",

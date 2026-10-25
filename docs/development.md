@@ -1,7 +1,7 @@
 # Develop and test Workspace
 
-Use Python 3.12+ and an explicitly selected compatible development Core. Workspace 1.6.0 uses the generic module source installer, native contribution and
-module SQL APIs in Core >=1.5,<2. Older Core 1.4.0 packages are not compatible.
+Use Python 3.12+ and an explicitly selected compatible development Core. Workspace 1.7.0 uses the generic module source installer, native contribution and
+module SQL APIs in Core >=1.7,<2. Older Core 1.4.0 packages are not compatible.
 
 ## Environment
 
@@ -28,8 +28,8 @@ retains its own integration, old-format migration and native-skill transition te
 
 ```console
 .venv/bin/python scripts/test.py --core /path/to/core
-python scripts/build-module.py dist/workspace --archive dist/contextopus-workspace-1.6.0.zip
-.venv/bin/python scripts/verify_installed.py --workspace-module dist/contextopus-workspace-1.6.0.zip
+python scripts/build-module.py dist/workspace --archive dist/contextopus-workspace-1.7.0.zip
+.venv/bin/python scripts/verify_installed.py --workspace-module dist/contextopus-workspace-1.7.0.zip
 ```
 
 Use a fresh build destination. An explicit Core source path can be added to
@@ -41,7 +41,7 @@ Host-client checks and an actual 1.1 writer remain optional and explicitly enabl
 writer migration test. Its source is pinned to commit
 `ff711966921c562f22aa7bcdb9358a871c8d4282` of Core. A manual CI workflow keeps this
 separate interpreter and migration check alongside Linux/macOS/Windows validation.
-CI uses the explicit compatible Core ref `v1.5.0` by default; a manual input can
+CI uses the explicit compatible Core ref `main` by default; a manual input can
 select another compatible candidate. Remote CI and native operating-system
 acceptance must be reported separately. The release workflow builds ZIP/checksum
 assets and uploads them for review; publication is a separate action.

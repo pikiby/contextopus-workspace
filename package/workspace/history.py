@@ -29,6 +29,7 @@ class HistoryMixin(HistoryCatalogMixin, HistoryQueriesMixin):
         for path in [
             self.engine.root / "INSTRUCTIONS.md",
             self.engine.root / "PROJECT.md",
+            self.engine.root / "Context.md",
             *sorted(self.engine.knowledge.rglob("*.md")),
         ]:
             self.engine._assert_safe(path)
@@ -36,6 +37,17 @@ class HistoryMixin(HistoryCatalogMixin, HistoryQueriesMixin):
                 result[path.relative_to(self.engine.root).as_posix()] = (
                     path.read_bytes().decode("utf-8")
                 )
+        from .context_document import read_instructions
+        rules = read_instructions(self)
+        if rules is not None:
+            result["INSTRUCTIONS.md"] = rules["content"]
+            from .context_document import library
+            store = library(self)
+            for document in [rules["primary"], *rules["documents"]]:
+                raw = (store.root / document["path"]).read_bytes().decode("utf-8")
+                if _revision(raw) != document["revision"]:
+                    raise PCWError("Required instruction changed during history capture; retry")
+                result[".contextopus-instructions/" + document["path"]] = raw
         from .settings import configuration_text
         configuration = configuration_text(self.control.layout, self.engine.workspace)
         from .configuration import WORKSPACE_POLICY_DEFAULTS
@@ -233,8 +245,11 @@ class HistoryMixin(HistoryCatalogMixin, HistoryQueriesMixin):
                         snapshot["status"] = "committed"
                 # Keep the workspace's regular index consistent without changing any file.
                 self._history_git("read-tree", "HEAD")
-                if self._history_blob("HEAD", SETTINGS_HISTORY_PATH):
-                    self._history_git("update-index", "--skip-worktree", "--", SETTINGS_HISTORY_PATH)
+                virtual = [path for path in snapshot["files"] if path == SETTINGS_HISTORY_PATH
+                           or path.startswith(".contextopus-instructions/")
+                           or path == "INSTRUCTIONS.md" and not (self.engine.root / path).exists()]
+                if virtual:
+                    self._history_git("update-index", "--skip-worktree", "--", *virtual)
                 self.control.write(path, encode(snapshot))
                 self._history_compact_snapshot(path, snapshot)
                 pending.remove(operation_id)
@@ -315,10 +330,16 @@ class HistoryMixin(HistoryCatalogMixin, HistoryQueriesMixin):
         ):
             raise PCWError("Supply exact permanent-data paths")
         for path in paths:
-            if path in {"INSTRUCTIONS.md", "PROJECT.md", SETTINGS_HISTORY_PATH}:
+            if path in {"INSTRUCTIONS.md", "PROJECT.md", "Context.md", SETTINGS_HISTORY_PATH}:
                 self.engine._assert_safe(self.engine.root / path)
             elif path.startswith("knowledge/"):
                 self.engine._knowledge_path(path[len("knowledge/") :])
+            elif path.startswith(".contextopus-instructions/"):
+                from pathlib import PurePosixPath
+                parts = PurePosixPath(path).parts
+                if len(parts) < 2 or any(p.startswith(".") for p in parts[1:]) or not path.endswith(".md"):
+                    raise PCWError("Invalid historical instruction path")
+                self.engine._assert_safe(self.engine.root / path)
             else:
                 raise PCWError(
                     "History includes INSTRUCTIONS.md, PROJECT.md, knowledge/*.md and .contextopus-settings.json"

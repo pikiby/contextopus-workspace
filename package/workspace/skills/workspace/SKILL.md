@@ -1,5 +1,5 @@
 ---
-name: w
+name: workspace
 description: Work with Contextopus Workspace; route creation, discovery, search, settings, upgrade, audit and rework requests.
 ---
 

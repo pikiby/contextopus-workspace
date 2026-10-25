@@ -4,7 +4,7 @@ Contextopus keeps reusable project knowledge outside a single conversation. One 
 
 MCP exposes `guide` for procedures/signatures, `read` for queries, `write` for mutations and `finish` for closing a named work cycle. Calls keep `work_root` and `context` outside operation `arguments`; for example, `read(operation="workspace.search", arguments={"query":"retry policy"}, context="example")` queries that selected context under its procedure.
 
-Each context has an indexed project record and permanent Markdown records under `knowledge/`. A record's YAML `id` stays stable when its descriptive filename changes. `type` is open vocabulary: knowledge, project, goal, task, decision, guide and template use the same operations; `status` is optional. Plans and goals remain intentions until evidence establishes completion.
+Each context has an indexed project record at its root as `Context.md` and other permanent Markdown records under `knowledge/`. Its YAML `instructions` mapping binds complete Workspace and optional Agents rules in `core/instructions/`. A record's YAML `id` stays stable when its descriptive filename changes. `type` is open vocabulary: knowledge, project, goal, task, decision, guide and template use the same operations; `status` is optional. Plans and goals remain intentions until evidence establishes completion.
 
 INSTRUCTIONS contain complete free-text rules; machine policies and retrieval settings live in Core configuration. Contexts share the index while keeping separate files and rules. Filtering retrieval to another context supplies evidence without changing the active instructions or write destination. Modules use this same Core rather than a separate vector database.
 

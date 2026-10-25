@@ -1,3 +1,7 @@
+---
+operations: ["workspace.workspace_create"]
+---
+
 Use the obtained applicable procedure before acting. Calls use `read` for queries, `write` for changes, and `guide(procedure="name")` or `guide(operation="module.operation")` for a needed procedure or unknown signature. Preserve the selected work_root/context.
 
 
@@ -12,3 +16,6 @@ Use `read` for queries and `write` for changes under the ordinary [Workspace pro
 4. Compose the complete free-form INSTRUCTIONS from that one template. Keep the policy values and the selected rereading value in the separate settings object; do not write machine flags into INSTRUCTIONS. The standard rereading mode is false; explicit agent/model overrides never grant additional permissions. Compose the project record and its author-written project_description from the user's stated purpose, goals and boundaries. If source links are accepted, include the template's Required sources rule directing the agent to create them under its stated criteria. If declined, keep the setting false; no authoring obligation is enabled. Show the resulting instructions, project text, settings and absolute destination so the agreed creation is concrete. Do not import unapproved facts from chat as knowledge.
 5. Call `workspace_create(request_id, instructions_content, project_content, user_request, settings, project_description)` with the exact agreed texts, separate settings object, reviewed description and the user's creation request. Retry identical input with the same request ID. Creation writes and indexes the initial project record, initializes no task and opens no cycle. Verify returned path, settings and independent Git status.
 6. If the user also authorized actual work, begin the [work cycle](procedure:workspace). Otherwise report creation and stop; an empty new context needs no fabricated knowledge, proposal or finish call. Keep the established coordinates for continuation.
+
+
+Canonical layout: the indexed project record lives at the context root as `Context.md` (`type: project`). Its YAML `instructions` mapping binds the complete shared rules in Core (`core/instructions`), including Workspace and optional Agents rules. Startup returns every required document in full; follow `reread_instructions` to reuse text already available for the same task. Existing roots move to this layout only through the explicit reviewed upgrade plan/apply path with retained backups.

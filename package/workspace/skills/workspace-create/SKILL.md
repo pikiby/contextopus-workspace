@@ -1,5 +1,5 @@
 ---
-name: w-create
+name: workspace-create
 description: Create a Contextopus context from an explicit request, with agreed placement and settings.
 ---
 

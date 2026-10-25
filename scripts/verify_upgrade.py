@@ -63,7 +63,7 @@ with tempfile.TemporaryDirectory(prefix='workspace-reservation-upgrade-') as tem
     with ProcessResources(Factory()) as resources, Application(root, 'test', resources=resources, discover=False) as app:
         assert app.query('workspace.reservations')['total'] == 1
         assert app.query('workspace.read', {'material_id': project['id']})['status'] == 'verified'
-    print(json.dumps({'old_version': '1.5.0', 'new_version': '1.6.0', 'module_update': 'passed',
+    print(json.dumps({'old_version': '1.5.0', 'new_version': '1.7.0', 'module_update': 'passed',
                       'unchanged_source_bytes': len(before), 'pending_review_preserved': True,
                       'legacy_proposal_applied': True, 'competing_write_blocked': True,
                       'reads_available': True, 'ownership_survives_restart': True}))

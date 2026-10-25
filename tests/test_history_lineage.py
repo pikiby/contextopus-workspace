@@ -175,7 +175,7 @@ def test_history_queries_are_available_through_mcp_and_paginate(history):
         initial = r.history_list()["versions"][-1]["commit"]
         assert r.history_list(material_id=r.project_read()["id"])["versions"][-1]["commit"] == initial
         root = query("history_changes", commit=initial)
-        assert root["parents"] == [] and root["files_count"] == 3
+        assert root["parents"] == [] and root["files_count"] == 4
         assert query("history_read", commit=commit, material_id=plan["created_ids"]["a"])["materials"]
         for operation in ("history_search", "history_changes"):
             assert server.pcw_query("describe", arguments={"operation": operation})["tool"] == "pcw_query"
