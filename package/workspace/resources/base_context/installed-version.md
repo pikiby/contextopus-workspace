@@ -1,8 +1,8 @@
 # Installed Contextopus documentation version
 
-This documentation bundle ships with the separately installed Workspace module 1.6.0. Core provides the shared services and can run without this module. Check `workspace.base_status` for its installed and packaged versions. An update preview is available through `workspace.base_plan`; installation requires that exact `plan_revision` through `workspace.base_install`.
+This documentation bundle ships with the separately installed Workspace module 1.7.0. Core provides the shared services and can run without this module. Check `workspace.base_status` for its installed and packaged versions. An update preview is available through `workspace.base_plan`; installation requires that exact `plan_revision` through `workspace.base_install`.
 
-Start with `contextopus-guide` for the product overview and scenario map. `retrieval-guide` covers finding contexts and answering independent questions; `workspace-guide` covers typed records and .tmp handoff; `evidence-guide` covers sources, history and analytics; `integrations-guide` covers five native clients. Module/algorithm guides and templates provide their implementation contracts, while `rules-template` supports directly requested instruction work.
+Start with `contextopus-guide` for the product overview and scenario map. `retrieval-guide` covers finding contexts and answering independent questions; `workspace-guide` covers typed records and .tmp handoff; `evidence-guide` covers sources, history and analytics; `integrations-guide` covers native clients. Module/algorithm guides and templates provide their implementation contracts, while `rules-template` supports directly requested instruction work.
 
 These are ordinary Workspace records in the shared index. They are reference material. Reading or searching them does not select their context or apply its instructions to an active task. The base role may point to another existing context through `core.base_select`.
 

@@ -73,7 +73,7 @@ def test_context_skill_migration_preserves_foreign(tmp_path, managed):
     assert bool(preview['preserved']) is not managed
     integrate(preview)
     assert old.exists() is not managed
-    assert (old.parent.parent / 'w-context/SKILL.md').exists()
+    assert (old.parent.parent / 'contextopus-workspace-context/SKILL.md').exists()
     assert not plan('codex', tmp_path, root=tmp_path / 'root')['removals']
 
 
@@ -100,14 +100,14 @@ def test_known_outgoing_context_skill_migrates_without_metadata(tmp_path, line_e
     assert [entry['path'] for entry in preview['removals']] == [str(old)]
     integrate(preview)
     assert not old.exists()
-    assert (old.parent.parent / 'w-context/SKILL.md').is_file()
+    assert (old.parent.parent / 'contextopus-workspace-context/SKILL.md').is_file()
 
 
 def test_module_context_skill_remains_during_core_native_plugin_cutover(tmp_path):
     install_workspace(tmp_path / "root")
     from importlib.metadata import version
     integrate(plan('codex', tmp_path, scope='user', root=tmp_path / 'root'))
-    skill = tmp_path / '.agents/skills/w-context/SKILL.md'
+    skill = tmp_path / '.agents/skills/contextopus-workspace-context/SKILL.md'
     assert skill.is_file()
     marker = tmp_path / ('.codex/plugins/cache/contextopus/contextopus/' + version('contextopus-core') + '/.codex-plugin/plugin.json')
     marker.parent.mkdir(parents=True)

@@ -39,9 +39,12 @@ def test_previous_released_skills_upgrade_without_manifest_and_preserve_edits(tm
     target.write_bytes(previous.encode())
     assert not (tmp_path / '.contextopus/codex-integration.json').exists()
     integrate(plan('codex', tmp_path, root=root))
-    current_name = 'w-context' if name == 'w-find' else name
+    canonical = 'workspace-context' if name == 'w-find' else 'workspace' + name[1:]
+    current_name = 'contextopus-' + canonical
     current_target = tmp_path / '.agents/skills' / current_name / 'SKILL.md'
-    assert current_target.read_bytes() == ((Path(__import__('contextopus.startup', fromlist=['Application']).__file__).parent / 'resources/skills' if current_name == 'm' else ROOT / 'package/workspace/skills') / current_name / 'SKILL.md').read_bytes()
+    source = ROOT / 'package/workspace/skills' / canonical / 'SKILL.md'
+    expected = source.read_text(encoding='utf-8').replace('name: ' + canonical + '\n', 'name: ' + current_name + '\n', 1)
+    assert current_target.read_text(encoding='utf-8') == expected
     if current_name != name:
         assert not target.exists()
     edited = previous + '\nUser-authored local constraint.\n'

@@ -31,13 +31,13 @@ def test_native_updates_previous_managed_w_analyze_description(tmp_path):
     install_workspace(root)
     project = tmp_path / 'project'
     integrate(plan('codex', project, root=root))
-    skill = project / '.agents/skills/w-analyze/SKILL.md'
+    skill = project / '.agents/skills/contextopus-workspace-analyze/SKILL.md'
     current = skill.read_bytes()
     previous = current.replace(b'description:', b'description: Previous managed description. #', 1)
     skill.write_bytes(previous)
     manifest_path = project / '.contextopus/codex-integration.json'
     manifest = json.loads(manifest_path.read_text())
-    manifest['skills']['.agents/skills/w-analyze/SKILL.md'] = hashlib.sha256(previous).hexdigest()
+    manifest['skills']['.agents/skills/contextopus-workspace-analyze/SKILL.md'] = hashlib.sha256(previous).hexdigest()
     manifest_path.write_text(json.dumps(manifest))
     preview = plan('codex', project, root=root)
     integrate(preview)
@@ -53,7 +53,7 @@ def test_disabled_workspace_retires_managed_skills_once_and_preserves_edited_ski
     install_workspace(root)
     integrate(plan('codex', project, root=root))
     assert not integrate(plan('codex', project, root=root))['written']
-    edited = project / '.agents/skills/w-search/SKILL.md'
+    edited = project / '.agents/skills/contextopus-workspace-search/SKILL.md'
     edited.write_text('User changes remain')
     with Application(root, discover=False) as app:
         app.execute('core.module_disable', {'module': 'workspace'})
@@ -63,8 +63,8 @@ def test_disabled_workspace_retires_managed_skills_once_and_preserves_edited_ski
     assert str(edited) in {item['path'] for item in preview['preserved']}
     integrate(preview)
     assert edited.read_text() == 'User changes remain'
-    assert not (project / '.agents/skills/w/SKILL.md').exists()
+    assert not (project / '.agents/skills/contextopus-workspace/SKILL.md').exists()
     receipt = json.loads((project / '.contextopus/codex-integration.json').read_text())
     assert receipt['module_skills'] == {}
-    assert '.agents/skills/w/SKILL.md' not in receipt['skills']
-    assert (project / '.agents/skills/m/SKILL.md').is_file()
+    assert '.agents/skills/contextopus-workspace/SKILL.md' not in receipt['skills']
+    assert (project / '.agents/skills/contextopus-modules/SKILL.md').is_file()

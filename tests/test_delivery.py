@@ -10,7 +10,7 @@ from workspace_support import install_workspace
 def test_collision_is_not_overwritten(tmp_path):
     root = tmp_path / "core"
     install_workspace(root)
-    skill = tmp_path / ".agents/skills/w/SKILL.md"
+    skill = tmp_path / ".agents/skills/contextopus-workspace/SKILL.md"
     skill.parent.mkdir(parents=True)
     skill.write_text("my unrelated skill")
     with pytest.raises(IntegrationConflict, match="collision"):
@@ -44,12 +44,12 @@ def test_owned_skill_upgrade_preserves_user_edits(tmp_path):
     install_workspace(root)
     preview = plan("codex", tmp_path, root=root)
     integrate(preview)
-    skill = tmp_path / ".agents/skills/w/SKILL.md"
+    skill = tmp_path / ".agents/skills/contextopus-workspace/SKILL.md"
     manifest = tmp_path / ".contextopus/codex-integration.json"
     saved = json.loads(manifest.read_text())
     # Simulate an older, unmodified installation recorded by the installer.
     skill.write_text("older generated version")
-    saved["skills"][".agents/skills/w/SKILL.md"] = hashlib.sha256(
+    saved["skills"][".agents/skills/contextopus-workspace/SKILL.md"] = hashlib.sha256(
         skill.read_bytes()
     ).hexdigest()
     manifest.write_text(json.dumps(saved))

@@ -51,6 +51,16 @@ with tempfile.TemporaryDirectory(prefix='workspace-reservation-upgrade-') as tem
         assert all((root / p).read_bytes() == content for p, content in before.items())
         assert app.query('workspace.proposal_read', {'cycle_id': cycle, 'proposal_id': pending['proposal_id']})['revision'] == pending['revision']
         assert app.execute('workspace.proposal_apply', {'cycle_id': cycle, 'proposal_id': pending['proposal_id'], 'expected_revision': pending['revision']})['status'] == 'applied'
+        # Replacing module code preserves format 5. The reviewed context migration
+        # is a separate operation and must precede starting work on format 6.
+        migration = app.query('workspace.upgrade_plan')
+        assert not migration['compatible']
+        app.execute('workspace.upgrade_apply', {
+            'expected_revision': migration['revision'],
+            'user_request': 'Migrate this isolated upgrade verification context',
+        })
+        assert app.query('workspace.upgrade_plan')['compatible']
+        assert 'Keep verified information.' in app.query('workspace.instructions_read')['content']
         other = app.execute('workspace.startup', {'request_id': 'new-work', 'user_request': 'Independent work'})['cycle_id']
         lease = app.execute('workspace.reserve', {'cycle_id': cycle, 'material_ids': [project['id']], 'reason': 'Upgrade acceptance edit'})
         assert app.query('workspace.read', {'material_id': project['id']})['status'] == 'verified'

@@ -40,7 +40,7 @@ def test_native_home_preserves_yaml_and_custom_skills_and_is_idempotent(tmp_path
 
     preview = plan("hermes", tmp_path, scope="user", root=workspace_root)
     assert config.read_text() == original  # Preview has no writes.
-    assert not (home / "skills/w").exists()
+    assert not (home / "skills/contextopus-workspace").exists()
     integrate(preview)
     actual = config.read_text()
     assert actual.replace('  contextopus:\n    url: http://127.0.0.1:8765/mcp\n    tools:\n      resources: false\n      prompts: false\n', "") == original
@@ -49,7 +49,7 @@ def test_native_home_preserves_yaml_and_custom_skills_and_is_idempotent(tmp_path
     }
     assert custom.read_text() == "my skill"
     assert {path.parent.name for path in (home / "skills").glob("*/SKILL.md")} == {
-        "custom", "m", "w", "w-analyze", "w-context", "w-create", "w-search", "w-settings",
+        "custom", "contextopus-modules", "contextopus-workspace", "contextopus-workspace-analyze", "contextopus-workspace-context", "contextopus-workspace-create", "contextopus-workspace-search", "contextopus-workspace-settings",
     }
     assert not integrate(plan("hermes", tmp_path, scope="user", root=workspace_root))["written"]
 
@@ -67,12 +67,12 @@ def test_native_home_preserves_yaml_and_custom_skills_and_is_idempotent(tmp_path
 def test_managed_skill_upgrade_and_modified_collision(tmp_path, workspace_root):
     integrate(plan("hermes", tmp_path, scope="user", root=workspace_root))
     home = tmp_path / ".hermes"
-    target = home / "skills/w/SKILL.md"
+    target = home / "skills/contextopus-workspace/SKILL.md"
     current = target.read_bytes()
     target.write_text("older managed skill")
     receipt = home / ".contextopus/hermes-integration.json"
     managed = json.loads(receipt.read_text())
-    managed["skills"][".hermes/skills/w/SKILL.md"] = hashlib.sha256(target.read_bytes()).hexdigest()
+    managed["skills"][".hermes/skills/contextopus-workspace/SKILL.md"] = hashlib.sha256(target.read_bytes()).hexdigest()
     receipt.write_text(json.dumps(managed))
     integrate(plan("hermes", tmp_path, scope="user", root=workspace_root))
     assert target.read_bytes() == current
@@ -83,7 +83,7 @@ def test_managed_skill_upgrade_and_modified_collision(tmp_path, workspace_root):
 
 
 def test_custom_canonical_skill_collision_has_no_config_write(tmp_path, workspace_root):
-    target = tmp_path / ".hermes/skills/w/SKILL.md"
+    target = tmp_path / ".hermes/skills/contextopus-workspace/SKILL.md"
     target.parent.mkdir(parents=True)
     target.write_text("custom w skill")
     with pytest.raises(IntegrationConflict, match="collision"):
@@ -92,7 +92,7 @@ def test_custom_canonical_skill_collision_has_no_config_write(tmp_path, workspac
     assert target.read_text() == "custom w skill"
 
 
-@pytest.mark.parametrize("changed", ["config.yaml", "skills/w/SKILL.md", ".contextopus/hermes-integration.json"])
+@pytest.mark.parametrize("changed", ["config.yaml", "skills/contextopus-workspace/SKILL.md", ".contextopus/hermes-integration.json"])
 def test_stale_preview_checks_all_targets_before_writing(tmp_path, changed, workspace_root):
     preview = plan("hermes", tmp_path, scope="user", root=workspace_root)
     target = tmp_path / ".hermes" / changed
@@ -101,7 +101,7 @@ def test_stale_preview_checks_all_targets_before_writing(tmp_path, changed, work
     with pytest.raises(IntegrationConflict, match="changed after preview"):
         integrate(preview)
     assert target.read_text() == "changed after preview"
-    assert not (tmp_path / ".hermes/skills/w-create/SKILL.md").exists()
+    assert not (tmp_path / ".hermes/skills/contextopus-workspace-create/SKILL.md").exists()
 
 
 def test_environment_home_and_explicit_profile_keep_separate_receipts(tmp_path, monkeypatch, workspace_root):
@@ -112,7 +112,7 @@ def test_environment_home_and_explicit_profile_keep_separate_receipts(tmp_path, 
     integrate(plan("hermes", tmp_path / "user", scope="user", root=workspace_root, hermes_home=profile_home))
     for home in (environment_home, profile_home):
         assert (home / "config.yaml").is_file()
-        assert (home / "skills/w/SKILL.md").is_file()
+        assert (home / "skills/contextopus-workspace/SKILL.md").is_file()
         assert (home / ".contextopus/hermes-integration.json").is_file()
     assert not integrate(plan("hermes", tmp_path / "user", scope="user", root=workspace_root))["written"]
     assert not integrate(plan("hermes", tmp_path / "user", scope="user", root=workspace_root, hermes_home=profile_home))["written"]

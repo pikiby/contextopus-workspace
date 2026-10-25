@@ -414,7 +414,7 @@ def test_registered_lightweight_settings_schema_and_free_rule_template(tmp_path)
         assert not defaults['content'].startswith('---')
         from workspace.configuration import WORKSPACE_CREATION_DEFAULTS
         assert defaults['creation_defaults'] == {**WORKSPACE_CREATION_DEFAULTS, 'reread_instructions': False}
-        for name in ('w', 'w-search', 'w-settings', 'w-create', 'w-context', 'w-analyze', 'm'):
+        for name in ('workspace', 'workspace-search', 'workspace-settings', 'workspace-create', 'workspace-context', 'workspace-analyze', 'modules'):
             from importlib.resources import files
             skill = ((SOURCE / 'package/workspace/skills' / name / 'SKILL.md').read_text()
                      if name.startswith('w') else files('contextopus').joinpath('resources', 'skills', name, 'SKILL.md').read_text())
