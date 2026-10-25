@@ -121,4 +121,4 @@ for package formats, setup and verification limits.
 
 ## Current release
 
-[1.7.0: Shared instructions and project documents](docs/releases/1.7.0.md) · [Downloads](https://github.com/pikiby/contextopus-workspace/releases/tag/v1.7.0)
+[1.7.0: Shared instructions and project documents](https://github.com/pikiby/contextopus-workspace/releases/tag/v1.7.0) · [Downloads](https://github.com/pikiby/contextopus-workspace/releases/tag/v1.7.0)
