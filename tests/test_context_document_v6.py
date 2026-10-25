@@ -17,10 +17,11 @@ def runtime(tmp_path):
     return closing(result)
 
 
-def downgrade(r):
+def downgrade(r, line_ending="\n"):
     """Represent real format5 sources without changing their active YAML identity."""
     path = r.engine.root / "Context.md"
-    (r.engine.root / "INSTRUCTIONS.md").write_text(r.instructions_read()["content"])
+    rules = r.instructions_read()["content"].replace("\r\n", "\n").replace("\n", line_ending)
+    (r.engine.root / "INSTRUCTIONS.md").write_bytes(rules.encode("utf-8"))
     metadata, body = _parse(path.read_text())
     metadata.pop("instructions")
     old = r.engine.knowledge / "Descriptive-project-name.md"
@@ -58,10 +59,11 @@ def test_context_root_index_update_history_and_full_required_rules(tmp_path):
         assert r.instructions_read()["content"] == rules["content"]
 
 
-def test_explicit_upgrade_preserves_id_body_rules_unknown_files_and_retries(tmp_path):
+@pytest.mark.parametrize("line_ending", ["\n", "\r\n"], ids=["lf", "crlf"])
+def test_explicit_upgrade_preserves_id_body_rules_unknown_files_and_retries(tmp_path, line_ending):
     with runtime(tmp_path) as r:
-        expected_rules = r.instructions_read()["content"]
-        ident, old = downgrade(r)
+        expected_rules = r.instructions_read()["content"].replace("\r\n", "\n").replace("\n", line_ending)
+        ident, old = downgrade(r, line_ending)
         unknown = r.engine.root / "user.bin"
         unknown.write_bytes(b"\x00user\xff")
         before = old.read_bytes()

@@ -10,6 +10,10 @@ on:
         default: main
         description: Compatible Core tag, commit or branch
         required: true
+      test_path:
+        description: Test path for a focused retry; tests runs the complete suite
+        default: tests
+        required: true
 jobs:
   validate:
     strategy:
@@ -31,7 +35,11 @@ jobs:
           python-version: ${{ matrix.python }}
       - run: python -m pip install -e "./.ci/core[test]" build
       - run: python -m pip install -e ".[test]" --no-deps
-      - run: python scripts/test.py --core .ci/core -- -v --durations=20 -o faulthandler_timeout=120
+      - name: Test selected scope (complete suite by default)
+        env:
+          WORKSPACE_TEST_PATH: ${{ inputs.test_path || 'tests' }}
+        run: >-
+          python -c "import os,subprocess,sys; subprocess.run([sys.executable,'scripts/test.py','--core','.ci/core','--','-v',os.environ['WORKSPACE_TEST_PATH'],'--durations=20','-o','faulthandler_timeout=120'],check=True)"
       - run: python scripts/build-module.py dist/workspace --archive dist/contextopus-workspace-1.7.0.zip
       - run: python scripts/verify_installed.py --workspace-module dist/contextopus-workspace-1.7.0.zip
       - run: python -m build
