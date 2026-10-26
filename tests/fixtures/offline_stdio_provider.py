@@ -43,12 +43,13 @@ class _Provider:
 _runtime = server.runtime
 
 
-def _offline_runtime(work_root, workspace, provider_factory=None):
+def _offline_runtime(work_root, workspace, provider_factory=None, instruction_reconcile=None):
     store = EventStore(work_root)
     plan = store.storage_prepare()
     if plan['needs_migration']:
         store.storage_apply(plan['revision'])
-    return _runtime(work_root, workspace, provider_factory=provider_factory or _Provider)
+    return _runtime(work_root, workspace, provider_factory=provider_factory or _Provider,
+                    instruction_reconcile=instruction_reconcile)
 
 
 server.runtime = _offline_runtime
