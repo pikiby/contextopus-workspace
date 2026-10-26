@@ -238,7 +238,7 @@ def test_installed_writer_to_current_runtime_and_mcp_copy(tmp_path, monkeypatch,
     mcp = server.create_server(migrated)
     async def call(tool, operation, arguments=None, context='alpha', detail='full'):
         return result_value(await mcp.call_tool(tool, dict(operation=operation, arguments=arguments or {},
-            context=context, work_root=str(migrated), detail=detail)))
+            context=context, detail=detail)))
     def invoke(tool, operation, arguments=None, **kwargs):
         return asyncio.run(call(tool, operation, arguments, **kwargs))
     migrations = {}
