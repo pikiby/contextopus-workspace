@@ -361,7 +361,7 @@ class LauncherTests(unittest.TestCase):
                     pending = call("tmp_write", content="Protocol fixture content")
                     self.assertEqual("blocked", call("finish")["status"])
                     self.assertEqual(1, call("status")["materials"])
-                    proposal = call("proposal_prepare", changes=[{"key": "fixture", "content": "Protocol fixture content", "description": "Persisted fact used by the isolated stdio contract fixture."}])
+                    proposal = call("proposal_prepare", expected_task_revision=opened["task_revision"], changes=[{"key": "fixture", "content": "Protocol fixture content", "description": "Persisted fact used by the isolated stdio contract fixture."}])
                     self.assertEqual("Protocol fixture content", proposal["review_changes"][0]["body_changes"][0]["after"])
                     review = call("proposal_read", proposal_id=proposal["proposal_id"])
                     self.assertIn("Protocol fixture content", review["review"])
@@ -371,7 +371,7 @@ class LauncherTests(unittest.TestCase):
                     item = applied["materials"][0]
                     self.assertRegex(item["id"], r"^[a-f0-9]{32}\.md$")
                     self.assertEqual("Protocol fixture content", call("read", material_id=item["id"])["content"])
-                    second = call("proposal_prepare", changes=[{"key": "related", "content": "Related fact", "description": "A related fact for testing links over stdio.", "links": [item["id"]]}])
+                    second = call("proposal_prepare", expected_task_revision=opened["task_revision"], changes=[{"key": "related", "content": "Related fact", "description": "A related fact for testing links over stdio.", "links": [item["id"]]}])
                     other = call("proposal_apply", proposal_id=second["proposal_id"], expected_revision=second["revision"],
                                  confirmation="Apply the displayed related fact")["materials"][0]
                     self.assertEqual([item["id"]], call("read", material_id=other["id"])["links"])

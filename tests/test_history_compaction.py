@@ -6,7 +6,7 @@ from test_history_lineage import history, save
 
 
 def pending_apply(r, c, content):
-    proposal = r.proposal_prepare(c, [{"description": "Verified behavior used to test historical replay and policy evidence", 'key': 'new', 'content': content}])
+    proposal = r.proposal_prepare(c, [{"description": "Verified behavior used to test historical replay and policy evidence", 'key': 'new', 'content': content}], expected_task_revision=r.status(c)['task_revision'])
     result = r.proposal_apply(c, proposal['proposal_id'], proposal['revision'])
     return proposal, result
 

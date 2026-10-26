@@ -18,7 +18,7 @@ Compact responses omit the candidate snapshot; `core.search_event` exposes the f
 
 ## Inspect a bounded episode
 
-The following are `read` tool arguments. The selected root can be supplied as `work_root`.
+The following are `read` tool arguments. Select a context by name when needed; storage is configured by the MCP server.
 
 ```json
 {"operation":"core.search_events","arguments":{"context":"example","task_id":"task-id","limit":20}}

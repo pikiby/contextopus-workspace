@@ -8,6 +8,7 @@ import re
 
 from .runtime import PCWError, _id
 from .history_queries import PERMANENT_PATHS, page
+from .operation_types import LineageDepth, PageLimit
 
 
 class HistoryCatalogMixin:
@@ -128,7 +129,7 @@ class HistoryCatalogMixin:
             db.executemany('INSERT OR REPLACE INTO history_edges VALUES (?, ?, ?, ?, ?, ?, ?, ?)', edges)
         return commit
 
-    def history_index(self, ref: str = 'HEAD', cursor: str | None = None, limit: int = 100):
+    def history_index(self, ref: str = 'HEAD', cursor: str | None = None, limit: PageLimit = 100):
         self._require_format()
         page(0, limit)
         with self.control.guard():
@@ -156,7 +157,7 @@ class HistoryCatalogMixin:
                         next_cursor=next_cursor, coverage={'offset': offset, 'count': len(indexed), 'reached_root': next_cursor is None,
                                                          'complete': offset == 0 and next_cursor is None})
 
-    def history_lineage(self, material_id: str, direction: str = 'ancestors', ref: str = 'HEAD', since: str | None = None, until: str | None = None, max_depth: int = 5, limit: int = 50, start_commit: str | None = None):
+    def history_lineage(self, material_id: str, direction: str = 'ancestors', ref: str = 'HEAD', since: str | None = None, until: str | None = None, max_depth: LineageDepth = 5, limit: PageLimit = 50, start_commit: str | None = None):
         self._require_format()
         _id(material_id)
         page(0, limit)

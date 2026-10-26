@@ -145,7 +145,7 @@ class WorkspaceMixin(WorkspaceSettingsMixin):
             else ["Old workspace format"]
         )
         return {
-            "workspace": str(self.engine.root),
+            "workspace": self.engine.workspace,
             "format_version": version,
             "required_format": FORMAT_VERSION,
             "compatible": not problems,
@@ -195,7 +195,7 @@ class WorkspaceMixin(WorkspaceSettingsMixin):
                     self._require_format()
                     return {
                         "status": "created",
-                        "workspace": str(self.engine.root),
+                        "workspace": self.engine.workspace,
                         "replayed": True,
                     }
             elif self.engine.root.exists():
@@ -264,7 +264,7 @@ class WorkspaceMixin(WorkspaceSettingsMixin):
             self.control.write(record, encode(previous))
             return {
                 "status": "created",
-                "workspace": str(self.engine.root),
+                "workspace": self.engine.workspace,
                 "format_version": FORMAT_VERSION,
                 "settings": settings,
                 "instructions": self._instructions(),

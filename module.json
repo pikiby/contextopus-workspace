@@ -1,12 +1,12 @@
 {
   "id": "workspace",
-  "version": "1.7.0",
-  "core_requires": ">=1.7,<2",
+  "version": "1.8.0",
+  "core_requires": ">=1.8,<2",
   "description": "Persistent project contexts, linked knowledge, task state and evidence history.",
   "contribution": {
     "factory": "workspace/__init__.py:register",
     "requires": [
-      "contextopus-core>=1.5,<2"
+      "contextopus-core>=1.8,<2"
     ]
   },
   "skills": "workspace/skills",

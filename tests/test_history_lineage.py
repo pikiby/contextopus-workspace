@@ -23,7 +23,7 @@ def history(tmp_path):
 
 
 def save(runtime, cycle, changes, **kwargs):
-    plan = runtime.proposal_prepare(cycle, changes, **kwargs)
+    plan = runtime.proposal_prepare(cycle, changes, expected_task_revision=runtime.status(cycle)["task_revision"], **kwargs)
     result = runtime.proposal_apply(cycle, plan["proposal_id"], plan["revision"])
     assert result["status"] == "applied"
     return plan, result["history"]["commit"]
@@ -92,9 +92,9 @@ def test_rewritten_merge_split_and_renamed_record_history(history):
 
 def test_provenance_is_revision_bound_and_immutable_on_retry(history):
     r, c = history
-    plan = r.proposal_prepare(c, [{"description": "Verified behavior used to test historical replay and policy evidence", "key": "new", "content": "# Fact\nFirst state."}], summary="Record original evidence")
+    plan = r.proposal_prepare(c, [{"description": "Verified behavior used to test historical replay and policy evidence", "key": "new", "content": "# Fact\nFirst state."}], summary="Record original evidence", expected_task_revision=r.status(c)["task_revision"])
     revision = plan["revision"]
-    updated = r.proposal_prepare(c, [{"description": "Verified behavior used to test historical replay and policy evidence", "key": "new", "content": "# Fact\nFirst state."}],
+    updated = r.proposal_prepare(c, expected_task_revision=r.status(c)["task_revision"], changes=[{"description": "Verified behavior used to test historical replay and policy evidence", "key": "new", "content": "# Fact\nFirst state."}],
                                  proposal_id=plan["proposal_id"], summary="Record corrected reason")
     assert updated["revision"] != revision
     with pytest.raises(PCWError, match="exact presented"):
@@ -125,7 +125,7 @@ def test_invalid_provenance_does_not_change_permanent_files(history, declaration
     r, c = history
     before = r._permanent_files()
     with pytest.raises(PCWError):
-        r.proposal_prepare(c, [{"description": "Verified behavior used to test historical replay and policy evidence", "key": "new", "content": "# Fact"}], transformations=[declaration])
+        r.proposal_prepare(c, [{"description": "Verified behavior used to test historical replay and policy evidence", "key": "new", "content": "# Fact"}], transformations=[declaration], expected_task_revision=r.status(c)["task_revision"])
     assert before == r._permanent_files()
 
 
@@ -154,7 +154,7 @@ def test_pending_provenance_tampering_is_rejected(history):
 
 
 def save_without_commit(r, c):
-    plan = r.proposal_prepare(c, [{"description": "Verified behavior used to test historical replay and policy evidence", "key": "x", "content": "# X\nEvidence"}], summary="Approved meaning")
+    plan = r.proposal_prepare(c, [{"description": "Verified behavior used to test historical replay and policy evidence", "key": "x", "content": "# X\nEvidence"}], summary="Approved meaning", expected_task_revision=r.status(c)["task_revision"])
     return plan, r.proposal_apply(c, plan["proposal_id"], plan["revision"])
 
 

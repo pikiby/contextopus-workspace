@@ -29,11 +29,11 @@ Each manifest entry has an authored description and key-based navigation links. 
 
 ## Preview an update without losing local edits
 
-1. Inspect `core.base_status`, then request `core.base_plan` with the actual root/context coordinates. Even equal version strings do not establish that card contents are current; plan compares the managed content and links.
+1. Inspect `core.base_status`, then request `core.base_plan` for the selected context on the connected server. Even equal version strings do not establish that card contents are current; plan compares the managed content and links.
 2. Review incoming bodies, descriptions, navigation changes, conflicts and the exact `plan_revision`. A modified/deleted managed card, custom description or incompatible local size rule remains an explicit unresolved update. Keep local text and show both versions for a scoped decision; do not reset receipts or silently replace it.
 3. Apply only the reviewed plan through `core.base_install`, supplying actual confirmation when policy requires it. Retain pending proposal/indexing receipts for a safe retry. Report applied content, indexing/history and cleanup independently.
 
-The long-lived MCP owner caches an Application per root/context; that Application snapshots its packaged base bundle at construction. There is no public base-bundle reload operation. `core.algorithms_refresh` refreshes the algorithm registry/catalog, not these cards. Updating package files alone does not refresh an already-created Application: the supported owner refresh is a service restart, followed by a new plan. Do not use a fabricated context coordinate to evade the cache. No restart or live context update is implied by editing the shipped resources.
+The long-lived MCP owner is bound to one configured root and caches an Application per context; that Application snapshots its packaged base bundle at construction. There is no public base-bundle reload operation. `core.algorithms_refresh` refreshes the algorithm registry/catalog, not these cards. Updating package files alone does not refresh an already-created Application: the supported owner refresh is a service restart, followed by a new plan. Do not use a fabricated context coordinate to evade the cache. No restart or live context update is implied by editing the shipped resources.
 
 ## Installation and upgrade
 

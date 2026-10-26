@@ -42,7 +42,7 @@ def test_creation_choice_and_repeated_read_roundtrip(tmp_path, enabled):
         assert created["settings"]["create_required_sources"] is enabled
         assert runtime.settings_read(fields=["create_required_sources"])["values"]["create_required_sources"] is enabled
         cycle = runtime.startup("write")["cycle_id"]
-        proposal = runtime.proposal_prepare(cycle, [{"key": "support", "content": BODY,
+        proposal = runtime.proposal_prepare(cycle, expected_task_revision=runtime.status(cycle)["task_revision"], changes=[{"key": "support", "content": BODY,
             "description": "Explains how to obtain supported PostgreSQL versions and their end-of-support dates from the required authoritative source."}])
         runtime.proposal_apply(cycle, proposal["proposal_id"], proposal["revision"])
         ident = proposal["created_ids"]["support"]

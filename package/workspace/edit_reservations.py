@@ -11,6 +11,7 @@ import time
 import uuid
 
 from .runtime import PCWError
+from .operation_types import MaterialIDs, Offset, PageLimit, ReservationReason, ReservationTTL
 
 TABLE = "workspace_edit_reservations"
 DEFAULT_TTL = 900
@@ -147,8 +148,8 @@ class ReservationOperations:
     def _edits(self):
         return EditReservations(self.control)
 
-    def reserve(self, cycle_id: str, material_ids: list[str], reason: str,
-                ttl_seconds: int = DEFAULT_TTL):
+    def reserve(self, cycle_id: str, material_ids: MaterialIDs, reason: ReservationReason,
+                ttl_seconds: ReservationTTL = DEFAULT_TTL):
         with self._cycle(cycle_id) as (_, cycle), self.engine.read_guard():
             self._require_work(cycle)
             if not material_ids or len(material_ids) > 100:
@@ -157,7 +158,7 @@ class ReservationOperations:
             self._edits().acquire(cycle_id, ids, reason, ttl_seconds)
             return {"status": "reserved", "reservations": self._edits().rows(ids)}
 
-    def reservations(self, cycle_id: str | None = None, offset: int = 0, limit: int = 50):
+    def reservations(self, cycle_id: str | None = None, offset: Offset = 0, limit: PageLimit = 50):
         self._require_format(storage=False)
         if offset < 0 or not 1 <= limit <= 100:
             raise PCWError("Use offset >= 0 and limit between 1 and 100")
@@ -167,7 +168,7 @@ class ReservationOperations:
                 rows = [row for row in rows if row["cycle_id"] == cycle_id]
             return {"reservations": rows[offset:offset + limit], "total": len(rows)}
 
-    def reservation_renew(self, cycle_id: str, reservation_id: str, ttl_seconds: int = DEFAULT_TTL):
+    def reservation_renew(self, cycle_id: str, reservation_id: str, ttl_seconds: ReservationTTL = DEFAULT_TTL):
         with self._cycle(cycle_id):
             self._edits().renew(cycle_id, reservation_id, ttl_seconds)
             return {"status": "renewed", "reservations": [row for row in self._edits().rows()

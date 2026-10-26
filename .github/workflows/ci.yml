@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       core_repository:
-        description: Repository containing compatible Core >=1.7,<2
+        description: Repository containing compatible Core >=1.8,<2
         required: true
         default: pikiby/contextopus-core
       core_ref:
@@ -40,8 +40,8 @@ jobs:
           WORKSPACE_TEST_PATH: ${{ inputs.test_path || 'tests' }}
         run: >-
           python -c "import os,subprocess,sys; subprocess.run([sys.executable,'scripts/test.py','--core','.ci/core','--','-v',os.environ['WORKSPACE_TEST_PATH'],'--durations=20','-o','faulthandler_timeout=120'],check=True)"
-      - run: python scripts/build-module.py dist/workspace --archive dist/contextopus-workspace-1.7.0.zip
-      - run: python scripts/verify_installed.py --workspace-module dist/contextopus-workspace-1.7.0.zip
+      - run: python scripts/build-module.py dist/workspace --archive dist/contextopus-workspace-1.8.0.zip
+      - run: python scripts/verify_installed.py --workspace-module dist/contextopus-workspace-1.8.0.zip
       - run: python -m build
       - uses: actions/upload-artifact@v4
         with:
@@ -79,5 +79,5 @@ jobs:
       - name: Verify upgrade from the published Workspace 1.5 module
         run: |
           python -c "import urllib.request; urllib.request.urlretrieve('https://github.com/pikiby/contextopus-workspace/releases/download/v1.5.0/contextopus-workspace-1.5.0.zip', '.ci/workspace-1.5.0.zip')"
-          python scripts/build-module.py dist/workspace --archive dist/contextopus-workspace-1.7.0.zip
-          python scripts/verify_upgrade.py --previous-module .ci/workspace-1.5.0.zip --workspace-module dist/contextopus-workspace-1.7.0.zip
+          python scripts/build-module.py dist/workspace --archive dist/contextopus-workspace-1.8.0.zip
+          python scripts/verify_upgrade.py --previous-module .ci/workspace-1.5.0.zip --workspace-module dist/contextopus-workspace-1.8.0.zip

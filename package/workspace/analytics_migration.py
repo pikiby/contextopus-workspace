@@ -4,11 +4,12 @@ import json
 
 from .runtime import PCWError
 from .history_queries import page
+from .operation_types import PageLimit
 
 
 class AnalyticsMigrationMixin:
-    def analytics_migrate(self, limit: int = 50, cursor: str | None = None,
-                          apply: bool = False, git_limit: int = 50):
+    def analytics_migrate(self, limit: PageLimit = 50, cursor: str | None = None,
+                          apply: bool = False, git_limit: PageLimit = 50):
         self._require_format()
         page(0, limit)
         page(0, git_limit)

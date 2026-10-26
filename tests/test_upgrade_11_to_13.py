@@ -372,17 +372,18 @@ def test_installed_writer_to_current_runtime_and_mcp_copy(tmp_path, monkeypatch,
         apply_args = {**pending_args, 'expected_revision': old['pending']['revision']}
         permanent = migrated / 'modules/workspace/workspace_contexts/alpha/knowledge'
         before_denied = tree_hashes(permanent)
-        with pytest.raises(Exception, match='confirmation'):
-            invoke('write', 'workspace.proposal_apply', apply_args)
+        rejected = invoke('write', 'workspace.proposal_apply', apply_args)
+        assert rejected['status'] == 'reprepare_required' and rejected['knowledge_changed'] is False
         assert tree_hashes(permanent) == before_denied
         applied_pending = invoke('write', 'workspace.proposal_apply', {
             **apply_args, 'confirmation': f'Approve only the exact proposal authored by installed {old_version}'})
-        assert applied_pending['status'] == 'applied', applied_pending
+        assert applied_pending['status'] == 'reprepare_required', applied_pending
+        assert tree_hashes(permanent) == before_denied
         task = invoke('read', 'workspace.read', {'material_id': old['ids']['task']})
-        assert task['status'] == 'completed' and 'consumer ownership are verified' in task['content']
-        created = invoke('read', 'workspace.read', {'material_id': old['pending']['created_ids']['new']})
-        assert created['links'] == [old['ids']['guide'], old['ids']['task']]
-        # Original proposal evidence and migrated temporary cards survive apply.
+        assert task['status'] == old['records'][old['ids']['task']]['status']
+        assert task['content'] == old['records'][old['ids']['task']]['content']
+        # An old unstarted review has no task revision. Preserve it and require
+        # an explicit new review even when its old confirmation is supplied.
         for relative, content in pending_after_migration.items():
             assert (migrated / relative).read_bytes() == content
         for name, commits in old['git_commits'].items():

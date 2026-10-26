@@ -1,7 +1,7 @@
 # Develop and test Workspace
 
-Use Python 3.12+ and an explicitly selected compatible development Core. Workspace 1.7.0 uses the generic module source installer, native contribution and
-module SQL APIs in Core >=1.7,<2. Older Core 1.4.0 packages are not compatible.
+Use Python 3.12+ and an explicitly selected compatible development Core. Workspace 1.8.0 uses the generic module source installer, native contribution and
+module SQL APIs in Core >=1.8,<2. Older Core packages are not compatible with this module release.
 
 ## Environment
 
@@ -28,8 +28,8 @@ retains its own integration, old-format migration and native-skill transition te
 
 ```console
 .venv/bin/python scripts/test.py --core /path/to/core
-python scripts/build-module.py dist/workspace --archive dist/contextopus-workspace-1.7.0.zip
-.venv/bin/python scripts/verify_installed.py --workspace-module dist/contextopus-workspace-1.7.0.zip
+python scripts/build-module.py dist/workspace --archive dist/contextopus-workspace-1.8.0.zip
+.venv/bin/python scripts/verify_installed.py --workspace-module dist/contextopus-workspace-1.8.0.zip
 ```
 
 Use a fresh build destination. An explicit Core source path can be added to

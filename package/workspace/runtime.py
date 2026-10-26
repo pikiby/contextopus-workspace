@@ -229,7 +229,7 @@ class PCWRuntime:
                     "status": "blocked",
                     "reason": "Knowledge is missing. Restore it or explicitly authorize recreation.",
                     "next_action": "restore_knowledge",
-                    "workspace": str(self.root),
+                    "workspace": self.root.name,
                 }
             self.knowledge.mkdir(parents=True, exist_ok=True)
             self.state.mkdir(parents=True, exist_ok=True)
@@ -238,7 +238,7 @@ class PCWRuntime:
             with self._guard():
                 return {
                     "status": "recovered",
-                    "workspace": str(self.root),
+                    "workspace": self.root.name,
                     "pending_preparation": sorted(self.pending),
                     "knowledge_recreated": missing_knowledge,
                 }
@@ -414,7 +414,7 @@ class PCWRuntime:
 
         if (self.work_root / ".contextopus-freeze.json").exists():
             raise PCWError(
-                "Root is frozen for relocation; reopen through the relocation redirect"
+                "Root is frozen for relocation; after completion select the destination explicitly"
             )
         with self.control.guard(), self._mutex:
             if self._depth:
@@ -719,7 +719,7 @@ class PCWRuntime:
         with self._guard():
             needs_correction = self._needs_correction()
             return {
-                "workspace": str(self.root),
+                "workspace": self.root.name,
                 "materials": len(self.materials),
                 "pending_preparation": sorted(self.pending)[:50],
                 "pending_count": len(self.pending),

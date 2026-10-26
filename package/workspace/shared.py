@@ -421,6 +421,48 @@ class WorkspaceSourceAdapter(PCWRuntime):
             "path": material.path,
         }
 
+    def relation_candidates(self, anchors, offset=0, limit=50, *, catalog=None,
+                            owners=None, edges=None, in_proposal=(), codec=None):
+        """Decorate owner-resolved direct links; never load models or other modules."""
+        from contextopus.core.documents import direct_relations
+        from contextopus.core.rag import DocumentKey
+        from .records import record_revision
+
+        catalog = self.catalog if catalog is None else catalog
+        owners = self.owners if owners is None else owners
+        def key(ident):
+            return DocumentKey("workspace", owners.get(ident, self.workspace), ident)
+        if edges is None:
+            edges = [(ident, target) for ident, material in catalog.items()
+                     for target in material.links]
+        page = direct_relations([key(ident) for ident in anchors],
+                                [(key(source), key(target)) for source, target in edges],
+                                offset, limit)
+        codec = self.link_codec(catalog, owners) if codec is None else codec
+        selected = set(in_proposal)
+        items = []
+        for row in page["items"]:
+            ident = row["key"].id
+            material = catalog.get(ident)
+            items.append({
+                "anchor_id": row["anchor"].id, "id": ident,
+                "workspace": owners.get(ident),
+                "path": material.path if material else None,
+                "link": codec.encode([ident])[0] if material else None,
+                "title": next((line[2:].strip() for line in material.content.splitlines()
+                               if line.startswith("# ")), ident) if material else ident,
+                "description": material.metadata.get("description", "") if material else "",
+                "revision": record_revision(material) if material else None,
+                "direction": row["direction"], "in_proposal": ident in selected,
+                "missing": material is None,
+            })
+        return {**page, "items": items,
+                "coverage": "workspace_yaml_links",
+                "inventory_complete": not self.incompatible,
+                "unavailable_contexts": list(self.incompatible),
+                "coverage_limits": ["Body, other-metadata and cross-module links are not included.",
+                                    "Required sources are returned separately and are not navigation edges."]}
+
     def _material_invalidations(self, material):
         owner = self.owners.get(material.id, self.workspace)
         original = self.control
@@ -462,7 +504,7 @@ class WorkspaceSourceAdapter(PCWRuntime):
                 result.add(ident)
         return result
 
-    def _result(self, material, content=False):
+    def _result(self, material, content=False, *, relations=None):
         result = super()._result(material, content)
         from .records import record_revision
         result["revision"] = record_revision(material)
@@ -474,18 +516,27 @@ class WorkspaceSourceAdapter(PCWRuntime):
             )
         if content:
             result["sources"] = declarations(material.content)
+            result["relation_candidates"] = (self.relation_candidates([material.id])
+                                             if relations is None else relations)
         return result
 
-    def read(self, material_id):
+    def read(self, material_id, relation_offset=0, relation_limit=50):
         with self._guard():
-            return self._result(self.resolve(material_id), content=True)
+            material = self.resolve(material_id)
+            relations = self.relation_candidates([material.id], relation_offset, relation_limit)
+            return self._result(material, content=True, relations=relations)
 
     def read_many(self, material_ids):
         with self._guard():
+            edges = [(ident, target) for ident, material in self.catalog.items()
+                     for target in material.links]
+            codec = self.link_codec()
+            materials = [self.resolve(ident) for ident in self._batch_ids(material_ids)]
             return {
                 "materials": [
-                    self._result(self.resolve(i), content=True)
-                    for i in self._batch_ids(material_ids)
+                    self._result(material, content=True,
+                        relations=self.relation_candidates([material.id], edges=edges, codec=codec))
+                    for material in materials
                 ]
             }
 

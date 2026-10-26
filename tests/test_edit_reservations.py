@@ -16,10 +16,11 @@ from test_workspace_v3 import create
 def work(tmp_path):
     runtime = CycleRuntime(tmp_path, 'project', provider_factory=Factory())
     create(runtime, knowledge_approval_required=False, cleanup_approval_required=False)
-    cycle = runtime.startup('seed')['cycle_id']
+    opened = runtime.startup('seed')
+    cycle = opened['cycle_id']
     proposal = runtime.proposal_prepare(cycle, [
         {'key': key, 'content': '# ' + key, 'description': 'Verified ' + key + ' information.'}
-        for key in ('Alpha', 'Beta', 'Gamma')])
+        for key in ('Alpha', 'Beta', 'Gamma')], expected_task_revision=opened['task_revision'])
     runtime.proposal_apply(cycle, proposal['proposal_id'], proposal['revision'])
     cards = {key: runtime.read(material_id=ident) for key, ident in proposal['created_ids'].items()}
     a, b = (runtime.startup(key)['cycle_id'] for key in ('worker-a', 'worker-b'))
@@ -44,10 +45,10 @@ def test_owner_reason_and_reads_are_available_but_competing_changes_fail(work):
     assert r.search(query='Alpha')['results']
     for fields in ({'delete': True}, {'path': 'Renamed.md'}, {'links': [cards['Beta']['id']]}):
         with pytest.raises(PCWError, match='Update Windows installation commands'):
-            r.proposal_prepare(b, [change(card, **fields)])
-    other = r.proposal_prepare(b, [change(cards['Beta'], status='verified')])
+            r.proposal_prepare(b, [change(card, **fields)], expected_task_revision=r.status(b)['task_revision'])
+    other = r.proposal_prepare(b, [change(cards['Beta'], status='verified')], expected_task_revision=r.status(b)['task_revision'])
     assert save(r, b, other)['status'] == 'applied'
-    own = r.proposal_prepare(a, [change(card, status='verified')])
+    own = r.proposal_prepare(a, [change(card, status='verified')], expected_task_revision=r.status(a)['task_revision'])
     assert save(r, a, own)['status'] == 'applied'
     assert not r.reservations()['reservations']
 
@@ -69,7 +70,7 @@ def test_expiry_fences_old_proposal_even_if_same_cycle_reacquires(work, monkeypa
     clock = [1000.0]
     monkeypatch.setattr('workspace.edit_reservations.time.time', lambda: clock[0])
     held = r.reserve(a, [cards['Alpha']['id']], 'Check Alpha', ttl_seconds=10)['reservations'][0]
-    p = r.proposal_prepare(a, [change(cards['Alpha'], status='verified')])
+    p = r.proposal_prepare(a, [change(cards['Alpha'], status='verified')], expected_task_revision=r.status(a)['task_revision'])
     clock[0] += 11
     with pytest.raises(PCWError, match='expired'):
         r.reservation_renew(a, held['reservation_id'])
@@ -78,7 +79,7 @@ def test_expiry_fences_old_proposal_even_if_same_cycle_reacquires(work, monkeypa
     with pytest.raises(PCWError, match='expired, released or replaced'):
         save(r, a, p)
     revised = r.proposal_prepare(a, [change(r.read(material_id=cards['Alpha']['id']), status='verified')],
-                                 proposal_id=p['proposal_id'])
+                                 proposal_id=p['proposal_id'], expected_task_revision=r.status(a)['task_revision'])
     assert save(r, a, revised)['status'] == 'applied'
 
 
@@ -98,7 +99,7 @@ def test_renew_does_not_invalidate_prepared_review(work, monkeypatch):
     clock = [1000.0]
     monkeypatch.setattr('workspace.edit_reservations.time.time', lambda: clock[0])
     held = r.reserve(a, [cards['Alpha']['id']], 'A', ttl_seconds=10)['reservations'][0]
-    p = r.proposal_prepare(a, [change(cards['Alpha'], status='verified')])
+    p = r.proposal_prepare(a, [change(cards['Alpha'], status='verified')], expected_task_revision=r.status(a)['task_revision'])
     clock[0] += 5
     r.reservation_renew(a, held['reservation_id'], ttl_seconds=20)
     clock[0] += 10
@@ -107,14 +108,14 @@ def test_renew_does_not_invalidate_prepared_review(work, monkeypatch):
 
 def test_automatic_link_changes_join_the_same_atomic_reservation(work):
     r, cards, a, b = work
-    p = r.proposal_prepare(a, [change(cards['Beta'], links=[cards['Alpha']['id']])])
+    p = r.proposal_prepare(a, [change(cards['Beta'], links=[cards['Alpha']['id']])], expected_task_revision=r.status(a)['task_revision'])
     save(r, a, p)
     held = r.reserve(b, [cards['Beta']['id']], 'Maintain the referring card')['reservations'][0]
     with pytest.raises(PCWError, match='Maintain the referring card'):
-        r.proposal_prepare(a, [change(cards['Alpha'], path='Renamed.md')])
+        r.proposal_prepare(a, [change(cards['Alpha'], path='Renamed.md')], expected_task_revision=r.status(a)['task_revision'])
     assert r.reservations(cycle_id=a)['total'] == 0
     r.reservation_release(b, held['reservation_id'])
-    p = r.proposal_prepare(a, [change(cards['Alpha'], path='Renamed.md')])
+    p = r.proposal_prepare(a, [change(cards['Alpha'], path='Renamed.md')], expected_task_revision=r.status(a)['task_revision'])
     assert {x['material_id'] for x in p['reservations']} == {cards['Alpha']['id'], cards['Beta']['id']}
     assert save(r, a, p)['status'] == 'applied'
 
@@ -122,7 +123,7 @@ def test_automatic_link_changes_join_the_same_atomic_reservation(work):
 def test_external_edit_still_triggers_revision_conflict(work):
     r, cards, a, b = work
     card = cards['Alpha']
-    p = r.proposal_prepare(a, [change(card, status='verified')])
+    p = r.proposal_prepare(a, [change(card, status='verified')], expected_task_revision=r.status(a)['task_revision'])
     path = r.engine.root / card['path']
     path.write_bytes(path.read_bytes() + b'\nExternal editor change.\n')
     with pytest.raises(PCWError, match='conflict'):
@@ -149,7 +150,7 @@ def test_internal_update_delete_rename_and_migration_respect_reservation(work):
 
 def test_discard_and_finish_release_only_their_own_claims(work):
     r, cards, a, b = work
-    p = r.proposal_prepare(a, [change(cards['Alpha'], status='verified')])
+    p = r.proposal_prepare(a, [change(cards['Alpha'], status='verified')], expected_task_revision=r.status(a)['task_revision'])
     r.reserve(b, [cards['Beta']['id']], 'B')
     r.proposal_discard(a, p['proposal_id'], p['revision'])
     assert r.reservations(cycle_id=a)['total'] == 0
@@ -269,9 +270,9 @@ def test_invalid_reservation_request_never_acquires(work, reason, ttl):
 
 def test_revising_proposal_releases_dropped_cards_but_keeps_other_reviews(work):
     r, cards, a, b = work
-    first = r.proposal_prepare(a, [change(cards['Alpha'], status='verified'), change(cards['Beta'], status='verified')])
-    second = r.proposal_prepare(a, [change(cards['Beta'], status='checked')])
-    r.proposal_prepare(a, [change(cards['Gamma'], status='verified')], proposal_id=first['proposal_id'])
+    first = r.proposal_prepare(a, [change(cards['Alpha'], status='verified'), change(cards['Beta'], status='verified')], expected_task_revision=r.status(a)['task_revision'])
+    second = r.proposal_prepare(a, [change(cards['Beta'], status='checked')], expected_task_revision=r.status(a)['task_revision'])
+    r.proposal_prepare(a, [change(cards['Gamma'], status='verified')], proposal_id=first['proposal_id'], expected_task_revision=r.status(a)['task_revision'])
     assert {row['material_id'] for row in r.reservations()['reservations']} == {cards['Beta']['id'], cards['Gamma']['id']}
     assert r.reserve(b, [cards['Alpha']['id']], 'Independent Alpha edit')['status'] == 'reserved'
     r.proposal_discard(a, second['proposal_id'], second['revision'])

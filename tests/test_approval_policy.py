@@ -15,7 +15,7 @@ def policy(required):
 
 
 def prepare(r, c, text="# Facts\nAccurate project description"):
-    return r.proposal_prepare(c, [{"key": "topic", "content": text,
+    return r.proposal_prepare(c, expected_task_revision=r.status(c)["task_revision"], changes=[{"key": "topic", "content": text,
                                   "description": "Project facts used to test approval and partial-write recovery"}])
 
 
@@ -109,7 +109,7 @@ def test_policy_change_invalidates_old_preparation_in_both_directions(workspace,
     with pytest.raises(PCWError, match="Settings changed"):
         apply_knowledge(r, c, p, confirmation="yes")
     assert r.status(c)["materials"] == 1
-    renewed = r.proposal_prepare(c, [{"key": "topic", "content": "Fact",
+    renewed = r.proposal_prepare(c, expected_task_revision=r.status(c)["task_revision"], changes=[{"key": "topic", "content": "Fact",
                                      "description": "Reviewed fact under the changed approval policy"}], proposal_id=p["proposal_id"])
     assert renewed["approval_required"] is not required
 
@@ -139,7 +139,7 @@ def test_auto_mode_still_checks_file_conflicts_and_full_revision(workspace):
     seed = prepare(r, c)
     apply_knowledge(r, c, seed)
     material = r.read(c, seed["created_ids"]["topic"])
-    p = r.proposal_prepare(c, [{"material_id": material["id"], "expected_revision": material["revision"],
+    p = r.proposal_prepare(c, expected_task_revision=r.status(c)["task_revision"], changes=[{"material_id": material["id"], "expected_revision": material["revision"],
                                "content": "Updated fact", "description": "Updated facts with a concurrent-write conflict"}])
     with pytest.raises(PCWError, match="exact presented"):
         r.proposal_apply(c, p["proposal_id"], "wrong")

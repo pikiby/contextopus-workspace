@@ -263,6 +263,7 @@ class CodexHostTests(unittest.TestCase):
                   user_request="Create this temporary test context with the supplied settings")
         opened = self.tool("startup", request_id="fixture-" + uuid.uuid4().hex)
         self.cycle_id = opened["cycle_id"]
+        self.task_revision = opened["task_revision"]
 
     def tool(self, name, **arguments):
         if name not in {"startup", "workspace_create"} and hasattr(self, "cycle_id"):
@@ -281,7 +282,7 @@ class CodexHostTests(unittest.TestCase):
         change["content"] = content
         if links is not None:
             change["links"] = links
-        proposal = self.tool("proposal_prepare", changes=[change])
+        proposal = self.tool("proposal_prepare", changes=[change], expected_task_revision=self.task_revision)
         result = self.tool("proposal_apply", proposal_id=proposal["proposal_id"],
                            expected_revision=proposal["revision"], confirmation="Apply this test fixture")
         return result["materials"][0]

@@ -20,7 +20,7 @@ import os
 from pathlib import Path
 import shutil
 import uuid
-from typing import TypedDict, get_type_hints
+from typing import Literal, TypedDict, get_type_hints
 
 import yaml
 
@@ -40,6 +40,8 @@ from .audit import AuditMixin
 from .temporary_materials import TemporaryMaterialsMixin
 from .context_identity import context_metadata
 from .edit_reservations import ReservationOperations
+from .instruction_bindings import InstructionBindingsMixin
+from .operation_types import CandidateLimit, ContextNames, MaterialIDs, Offset, PageLimit, SearchOutput
 
 
 
@@ -95,6 +97,7 @@ def _knowledge_approval_required(content):
 
 
 class CycleRuntime(
+    InstructionBindingsMixin,
     ReservationOperations,
     TemporaryMaterialsMixin,
     FormatMigrationMixin,
@@ -112,6 +115,7 @@ class CycleRuntime(
         )
         self.control = self.engine.control
         self.record_path = self.control.root / "cycles.json"
+        self.instruction_reconcile = None
 
     def close(self):
         self.engine.close()
@@ -202,6 +206,45 @@ class CycleRuntime(
         ):
             raise PCWError("Implicit updates are disabled by current instructions")
 
+    @staticmethod
+    def _task_receipt(cycle):
+        request = {
+            "user_request": cycle.get("user_request"),
+            "clarifications": list(cycle.get("clarifications", [])),
+        }
+        canonical = json.dumps([request["user_request"], request["clarifications"]],
+                               ensure_ascii=False, separators=(",", ":"))
+        return {**request, "task_revision": _revision(canonical),
+                "clarification_count": len(request["clarifications"])}
+
+    def _task_conflict(self, cycle_id, cycle, expected_revision, clarification_count=None):
+        current = self._task_receipt(cycle)
+        if expected_revision == current["task_revision"]:
+            return None
+        if clarification_count is None:
+            # Preparation has no stored count yet. Find the exact earlier receipt
+            # without changing or normalizing the original request and messages.
+            clarification_count = 0
+            for count in range(len(current["clarifications"]) + 1) if expected_revision is not None else ():
+                previous = {**cycle, "clarifications": current["clarifications"][:count]}
+                if self._task_receipt(previous)["task_revision"] == expected_revision:
+                    clarification_count = count
+                    break
+        return {
+            "status": "reprepare_required" if expected_revision is None else "task_changed",
+            "cycle_id": cycle_id,
+            "knowledge_changed": False,
+            "prepared_task_revision": expected_revision,
+            "current_task_revision": current["task_revision"],
+            "new_clarifications": current["clarifications"][clarification_count:],
+            **current,
+            "next_action": "reprepare_proposal",
+            "next_call": {
+                "tool": "read", "operation": "workspace.status",
+                "arguments": {"cycle_id": cycle_id},
+            },
+        }
+
     def startup(
         self,
         request_id: str,
@@ -247,6 +290,7 @@ class CycleRuntime(
                         "tmp_cleared": False,
                         "purpose": cycle.get("purpose", "work"),
                         "task_id": self.engine.effective_task_id(cycle.get("task_id")),
+                        **self._task_receipt(cycle),
                         **(
                             {"instructions": self._instructions()}
                             if cycle["state"] == "active"
@@ -282,6 +326,7 @@ class CycleRuntime(
                     "task_id": task_id,
                     "user_request": user_request,
                     "clarifications": [],
+                    "clarification_requests": {},
                 }
                 records["starts"][request_id] = cycle_id
                 records["cycles"][cycle_id] = cycle
@@ -317,6 +362,7 @@ class CycleRuntime(
                     "instructions": instructions,
                     "project": self.project_read(),
                     **status,
+                    **self._task_receipt(cycle),
                 }
 
     def _call(self, cycle_id, method, **kwargs):
@@ -335,8 +381,7 @@ class CycleRuntime(
                 "cycle_id": cycle_id,
                 "cycle_status": cycle["state"],
                 **self._cleanup_snapshot(cycle_id),
-                "user_request": cycle.get("user_request"),
-                "clarifications": cycle.get("clarifications", []),
+                **self._task_receipt(cycle),
                 "proposals": outstanding[:50],
                 "outstanding_proposal_count": len(outstanding),
                 **self.engine.status(),
@@ -352,7 +397,7 @@ class CycleRuntime(
                 files[path.relative_to(self.engine.root).as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
         return {"cleanup_revision": _revision(_json(files)), "temporary_files": list(files)}
 
-    def cycles_list(self, offset: int = 0, limit: int = 50):
+    def cycles_list(self, offset: Offset = 0, limit: PageLimit = 50):
         if type(offset) is not int or offset < 0 or type(limit) is not int or not 1 <= limit <= 100:
             raise PCWError("Use a nonnegative offset and limit between 1 and 100")
         with self.control.guard():
@@ -365,12 +410,23 @@ class CycleRuntime(
                      if cycle["state"] not in {"closed", "cancelled", "replaced"}]
             return {"cycles": items[offset:offset + limit], "total": len(items)}
 
-    def clarification_add(self, cycle_id: str, text: str):
+    def clarification_add(self, cycle_id: str, text: str, request_id: str):
         _text(text, "text")
+        _id(request_id)
         with self._cycle(cycle_id) as (records, cycle):
+            requests = cycle.setdefault("clarification_requests", {})
+            if request_id in requests:
+                if requests[request_id]["text_hash"] != _revision(text):
+                    return {"status": "request_conflict", "cycle_id": cycle_id,
+                            "request_id": request_id, **self._task_receipt(cycle)}
+                return {"cycle_id": cycle_id, "request_id": request_id,
+                        "replayed": True, **self._task_receipt(cycle)}
             cycle.setdefault("clarifications", []).append(text)
+            requests[request_id] = {"index": len(cycle["clarifications"]) - 1,
+                                    "text_hash": _revision(text)}
             self._persist(records)
-            return {"cycle_id": cycle_id, "clarifications": list(cycle["clarifications"])}
+            return {"cycle_id": cycle_id, "request_id": request_id,
+                    "replayed": False, **self._task_receipt(cycle)}
 
     def _read_call(self, cycle_id, method, **kwargs):
         self._require_format()
@@ -378,7 +434,18 @@ class CycleRuntime(
             with self.engine.read_guard():
                 return getattr(self.engine, method)(**kwargs)
 
-    def list(self, cycle_id: str | None = None, offset: int = 0, limit: int = 50):
+    def list(self, cycle_id: str | None = None, offset: Offset = 0, limit: PageLimit = 50,
+             scope: Literal["all"] | None = None, request_id: str | None = None,
+             cursor: str | None = None, scope_id: str | None = None,
+             delta_refresh: bool = False, delta_cursor: str | None = None):
+        if any(value is not None for value in (scope, request_id, cursor, scope_id, delta_cursor)) or delta_refresh:
+            from .review_scopes import ReviewScopes
+            if cycle_id:
+                with self._cycle(cycle_id):
+                    pass
+            return ReviewScopes(self).page("list", scope=scope, request_id=request_id,
+                cursor=cursor, scope_id=scope_id, delta_refresh=delta_refresh,
+                delta_cursor=delta_cursor, offset=offset, limit=limit)
         return self._read_call(cycle_id, "list", offset=offset, limit=limit)
 
     def read(
@@ -386,6 +453,8 @@ class CycleRuntime(
         cycle_id: str | None = None,
         material_id: str = "",
         from_id: str | None = None,
+        relation_offset: Offset = 0,
+        relation_limit: PageLimit = 50,
     ):
         self._require_format()
         with self.engine.read_guard():
@@ -396,11 +465,19 @@ class CycleRuntime(
                 raise PCWError(
                     "from_id must have an existing link to the requested material"
                 )
-            return self._read_call(cycle_id, "read", material_id=material_id)
+            return self._read_call(cycle_id, "read", material_id=material_id,
+                                   relation_offset=relation_offset, relation_limit=relation_limit)
 
     def read_many(
-        self, cycle_id: str | None = None, material_ids: list[str] | None = None
+        self, cycle_id: str | None = None, material_ids: MaterialIDs | None = None,
+        scope_id: str | None = None,
     ):
+        if scope_id is not None:
+            from .review_scopes import ReviewScopes
+            if cycle_id:
+                with self._cycle(cycle_id):
+                    pass
+            return ReviewScopes(self).read_many(material_ids, scope_id)
         return self._read_call(cycle_id, "read_many", material_ids=material_ids)
 
     def search(
@@ -411,15 +488,15 @@ class CycleRuntime(
         d_max: float | None = None,
         min_jump: float | None = None,
         multiplier: float | None = None,
-        categories: list[str] | None = None,
+        categories: ContextNames | None = None,
         all_categories: bool = False,
         types: list[str] | None = None,
         statuses: list[str] | None = None,
         selection: dict | None = None,
-        output: str = "materials",
+        output: SearchOutput = "materials",
         purpose: str | None = None,
         task_id: str | None = None,
-        candidate_limit: int | None = None,
+        candidate_limit: CandidateLimit | None = None,
     ):
         return self._read_call(
             cycle_id,
@@ -508,6 +585,8 @@ class CycleRuntime(
             "proposal_id": plan["proposal_id"],
             "revision": revision,
             "status": state,
+            **({"task_revision": plan["task_revision"],
+                "clarification_count": plan["clarification_count"]} if "task_revision" in plan else {}),
             "kind": plan.get("kind", "knowledge"),
             "created_ids": plan["created_ids"],
             "review_path": path.with_suffix(".md")
@@ -518,6 +597,7 @@ class CycleRuntime(
             **({"reservations": self._edits().rows(list(plan["entries"]))}
                if plan.get("edit_reservations") else {}),
             "review_changes": self._review_changes(plan),
+            **self._proposal_relations(plan),
             "history_summary": plan.get("summary"),
             "transformations": plan.get("transformations", []),
             **(
@@ -538,7 +618,7 @@ class CycleRuntime(
             required = required or plan.get("instructions_approval_required", True)
             if state == "prepared":
                 required = required or self._policies()["instructions_approval_required"]
-        return {
+        result = {
             "approval_required": required,
             "next_action": "report_no_changes"
             if state == "no_changes"
@@ -546,6 +626,16 @@ class CycleRuntime(
             if required
             else "present_changes_in_chat_then_apply",
         }
+        if state in {"prepared", "partial", "applying"}:
+            result["next_call"] = {
+                "tool": "write",
+                "operation": "workspace.instructions_apply" if plan.get("kind") == "instructions" else "workspace.proposal_apply",
+                "arguments": {"cycle_id": plan["cycle_id"], "proposal_id": plan["proposal_id"],
+                              "expected_revision": _revision(_json(plan))},
+                "requires": (["present_review_changes"] + (["user_confirmation"] if required else []))
+                            if state == "prepared" else [],
+            }
+        return result
 
     def instructions_prepare(
         self,
@@ -682,6 +772,17 @@ class CycleRuntime(
         no_changes_reason: str | None = None,
         transformations: list[dict] | None = None,
         summary: str | None = None,
+        *,
+        expected_task_revision: str,
+    ):
+        return self._prepare_proposal(cycle_id, changes, replacements, proposal_id,
+                                      no_changes_reason, transformations, summary,
+                                      expected_task_revision=expected_task_revision)
+
+    def _prepare_proposal(
+        self, cycle_id, changes, replacements=None, proposal_id=None,
+        no_changes_reason=None, transformations=None, summary=None,
+        instruction_documents=None, *, expected_task_revision,
     ):
         """Prepare a complete, reviewed set without changing permanent files.
 
@@ -692,6 +793,10 @@ class CycleRuntime(
         """
         with self._cycle(cycle_id) as (records, cycle), self.engine._guard():
             self._require_work(cycle)
+            _text(expected_task_revision, "expected_task_revision")
+            conflict = self._task_conflict(cycle_id, cycle, expected_task_revision)
+            if conflict is not None:
+                return conflict
             instructions = self._instructions()
             approval_required = self._policies()["knowledge_approval_required"]
             if summary is not None and (not isinstance(summary, str) or not summary.strip()
@@ -806,7 +911,7 @@ class CycleRuntime(
                                    for role, ref in references.items())):
                         raise PCWError("instructions must map workspace and optional roles to wikilinks")
                     from .context_document import library
-                    resolved = library(self).resolve(list(references.values()))
+                    resolved = library(self).resolve(list(references.values()), prepared=instruction_documents)
                     instruction_binding_revisions[target_id] = resolved["revision"]
                     if references != metadata.get("instructions"):
                         instruction_bindings_changed = True
@@ -944,7 +1049,8 @@ class CycleRuntime(
             for key, entry in entries.items():
                 after = entry["after"]
                 if after:
-                    final_catalog[key] = Material(key, after["path"], after["metadata"], after["content"])
+                    final_catalog[key] = Material(key, after["path"],
+                        context_metadata(after["metadata"], self.engine.workspace), after["content"])
                     final_owners[key] = self.engine.workspace
             codec = self.engine.link_codec(final_catalog, final_owners)
             previous_codec = self.engine.link_codec()
@@ -964,6 +1070,8 @@ class CycleRuntime(
                 "format_version": 2,
                 "cycle_id": cycle_id,
                 "proposal_id": ident,
+                "task_revision": expected_task_revision,
+                "clarification_count": len(cycle.get("clarifications", [])),
                 "created_ids": aliases,
                 "entries": entries,
                 "instructions_revision": instructions["revision"],
@@ -974,6 +1082,25 @@ class CycleRuntime(
                 "instruction_bindings_revisions": instruction_binding_revisions,
                 "instructions_approval_required": self._policies()["instructions_approval_required"] if instruction_bindings_changed else False,
             }
+            if instruction_documents:
+                plan["instruction_documents"] = instruction_documents
+            relation_catalog = {**self.engine.catalog, **final_catalog}
+            relation_owners = {**self.engine.owners, **final_owners}
+            relation_edges = {(source, target)
+                              for catalog in (self.engine.catalog, final_catalog)
+                              for source, material in catalog.items()
+                              for target in material.links}
+            relation_pages, relation_offset = [], 0
+            while True:
+                relation_page = self.engine.relation_candidates(
+                    entries, relation_offset, 100, catalog=relation_catalog,
+                    owners=relation_owners, edges=relation_edges, in_proposal=entries)
+                relation_pages.extend(relation_page["items"])
+                if relation_page["next_offset"] is None:
+                    break
+                relation_offset = relation_page["next_offset"]
+            plan["relation_candidates"] = {**relation_page, "items": relation_pages,
+                                           "captured_at_preparation": True}
             linked_ids = {target for entry in entries.values() for side in ('before', 'after')
                           for target in (entry.get(side) or {}).get('link_ids', [])}
             plan['link_targets'] = {}
@@ -1155,6 +1282,14 @@ class CycleRuntime(
                 new_navigation = _parse(after["text"])[0].get("links", []) if after else []
                 if old_navigation != new_navigation:
                     changes[-1]["navigation_changes"] = {"before": old_navigation, "after": new_navigation}
+        for document in plan.get("instruction_documents", []):
+            changes.append({
+                "id": document["id"], "kind": "create", "scope": "core/instructions",
+                "path": "core/instructions/" + document["path"], "title": document["title"],
+                "body_changes": [{"before": "", "after": document["text"],
+                                  "before_start_line": 1, "after_start_line": 1}],
+                "links_added": [], "links_removed": [],
+            })
         return changes
 
     @staticmethod
@@ -1168,6 +1303,9 @@ class CycleRuntime(
             heading,
             "Temporary context remains until this cycle is explicitly closed.\n",
         ]
+        if "task_revision" in plan:
+            parts.append("\nTask revision: " + plan["task_revision"] + "\n"
+                         + "Clarification count: " + str(plan["clarification_count"]) + "\n")
         if "no_changes_reason" in plan:
             parts.append(
                 "\nNo permanent changes after result review:\n"
@@ -1195,22 +1333,46 @@ class CycleRuntime(
                 )
             )
             parts.append(diff or "No content change.\n")
+        for document in plan.get("instruction_documents", []):
+            parts.append("\n## New Core instruction: " + document["id"] + "\n"
+                         + "Path: core/instructions/" + document["path"] + "\n\n" + document["text"])
         return "\n".join(parts)
 
-    def proposal_read(self, cycle_id: str, proposal_id: str):
+    @staticmethod
+    def _proposal_relations(plan, offset=0, limit=50):
+        if type(offset) is not int or offset < 0 or type(limit) is not int or not 1 <= limit <= 100:
+            raise PCWError("Use a nonnegative relation_offset and relation_limit between 1 and 100")
+        inventory = plan.get("relation_candidates")
+        if inventory is None:
+            return {}
+        items = inventory["items"]
+        return {"relation_candidates": {**inventory, "items": items[offset:offset + limit],
+                "offset": offset, "limit": limit, "total": len(items),
+                "next_offset": offset + limit if offset + limit < len(items) else None}}
+
+    def proposal_read(self, cycle_id: str, proposal_id: str,
+                      relation_offset: Offset = 0, relation_limit: PageLimit = 50):
         with self._cycle(cycle_id) as (_, cycle), self.engine.read_guard():
             entry = cycle["proposals"].get(_id(proposal_id))
             if entry is None:
                 raise PCWError("Unknown proposal")
             plan = self._load_plan(cycle_id, proposal_id, entry)
+            task_conflict = None
+            if entry["state"] == "prepared" and plan.get("kind", "knowledge") == "knowledge":
+                task_conflict = self._task_conflict(cycle_id, cycle, plan.get("task_revision"),
+                                                    plan.get("clarification_count"))
             return {
                 "proposal_id": proposal_id,
                 **entry,
+                **({"task_revision": plan["task_revision"],
+                    "clarification_count": plan["clarification_count"]} if "task_revision" in plan else {}),
                 "review": self._review(plan),
                 "review_changes": self._review_changes(plan),
+                **self._proposal_relations(plan, relation_offset, relation_limit),
                 "history_summary": plan.get("summary"),
                 "transformations": plan.get("transformations", []),
                 **self._review_policy(plan, entry["state"]),
+                **(task_conflict or {}),
                 **(
                     {"no_changes_reason": plan["no_changes_reason"]}
                     if "no_changes_reason" in plan
@@ -1254,11 +1416,21 @@ class CycleRuntime(
         )
 
     def _preflight(self, plan, retry):
+        from .context_document import library
+        for document in plan.get("instruction_documents", []):
+            store = library(self)
+            try:
+                current = store.read(document["id"])
+            except FileNotFoundError:
+                store.prepare_create(document["path"], document["metadata"], document["content"])
+            else:
+                if not retry or current["path"] != document["path"] or current["revision"] != document["revision"]:
+                    raise PCWError("Prepared instruction conflicts with an existing document")
         for ident, expected in plan.get("instruction_bindings_revisions", {}).items():
             after = plan["entries"][ident]["after"]
             from .context_document import library
             references = _parse(after["text"])[0]["instructions"]
-            if library(self).resolve(list(references.values()))["revision"] != expected:
+            if library(self).resolve(list(references.values()), prepared=plan.get("instruction_documents"))["revision"] != expected:
                 raise PCWError("Required instruction target changed; prepare and present again")
         if plan.get('kind') not in {'instructions', 'project'}:
             codec = self._plan_codec(plan, 'after')
@@ -1346,6 +1518,11 @@ class CycleRuntime(
                     "status": "applied",
                     "replayed": True,
                 }
+            if entry["state"] == "prepared":
+                conflict = self._task_conflict(cycle_id, cycle, plan.get("task_revision"),
+                                               plan.get("clarification_count"))
+                if conflict is not None:
+                    return {**conflict, "proposal_id": proposal_id}
             plan = self._execution_plan(plan)
             # Finish an already-started authorized write before reviewing it under
             # new rules; otherwise a mid-recovery edit could strand partial data.
@@ -1382,6 +1559,15 @@ class CycleRuntime(
                 entry["state"] = "applying"
                 self._persist(records)
                 try:
+                    for document in plan.get("instruction_documents", []):
+                        from .context_document import library
+                        store = library(self)
+                        try:
+                            current = store.read(document["id"])
+                        except FileNotFoundError:
+                            current = store.save(document["path"], document["metadata"], document["content"])
+                        if current["revision"] != document["revision"]:
+                            raise PCWError("Applied instruction verification failed")
                     # Write survivors and redirect incoming links before any deletion.
                     for ident, change in plan["entries"].items():
                         before, after = change["before"], change["after"]
@@ -1416,10 +1602,19 @@ class CycleRuntime(
                         for ident, change in plan["entries"].items()
                         if change["after"] is not None
                     ]
+                    instruction_index = None
+                    if plan.get("instruction_documents"):
+                        try:
+                            instruction_index = (self.instruction_reconcile()
+                                if self.instruction_reconcile is not None else
+                                {"status": "pending", "error": "No Core indexing callback configured"})
+                        except Exception as exc:
+                            instruction_index = {"status": "pending", "error": str(exc)}
                     history = self._history_record(proposal_id, plan=plan)
                     entry["state"] = (
                         "index_pending"
-                        if any(m["index_status"] != "indexed" for m in materials)
+                        if (any(m["index_status"] != "indexed" for m in materials)
+                            or instruction_index is not None and instruction_index["status"] != "indexed")
                         else "applied"
                     )
                     self._persist(records)
@@ -1432,6 +1627,12 @@ class CycleRuntime(
                         "materials": materials,
                         "tmp_preserved": True,
                         "history": history,
+                        **({"instruction_index": instruction_index} if instruction_index is not None else {}),
+                        **({"next_call": {"tool": "write", "operation": "workspace.proposal_apply",
+                             "arguments": {"cycle_id": cycle_id, "proposal_id": proposal_id,
+                                           "expected_revision": expected_revision,
+                                           **({"confirmation": confirmation} if confirmation is not None else {})}}}
+                           if entry["state"] == "index_pending" else {}),
                     }
                 except Exception as exc:
                     entry["state"] = "partial"
@@ -1442,6 +1643,10 @@ class CycleRuntime(
                         "error": str(exc),
                         "tmp_preserved": True,
                         "next_action": "proposal_apply",
+                        "next_call": {"tool": "write", "operation": "workspace.proposal_apply",
+                                      "arguments": {"cycle_id": cycle_id, "proposal_id": proposal_id,
+                                                    "expected_revision": expected_revision,
+                                                    **({"confirmation": confirmation} if confirmation is not None else {})}},
                     }
 
     def finish(self, cycle_id: str, cancel: bool = False, confirmation: str | None = None,

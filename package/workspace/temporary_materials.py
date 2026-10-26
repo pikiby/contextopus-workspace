@@ -13,6 +13,7 @@ from .runtime import PCWError, Material, _id, _parse, _revision
 from .records import validate_description
 from .context_identity import context_metadata
 from .sources import declarations, migrate_sources
+from .operation_types import Offset, PageLimit
 from urllib.parse import unquote
 
 
@@ -321,7 +322,7 @@ class TemporaryMaterialsMixin:
         with self._cycle(cycle_id):
             return self._temporary_result(self._temporary_find(cycle_id, material_id)[1])
 
-    def tmp_list(self, cycle_id: str, offset: int = 0, limit: int = 50):
+    def tmp_list(self, cycle_id: str, offset: Offset = 0, limit: PageLimit = 50):
         with self._cycle(cycle_id):
             if type(offset) is not int or offset < 0 or type(limit) is not int or not 1 <= limit <= 100:
                 raise PCWError('Use a nonnegative offset and limit between 1 and 100')

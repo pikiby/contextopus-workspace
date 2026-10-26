@@ -16,6 +16,7 @@ from .workspaces import encode
 from .history_events import event_from_plan, commit_message
 from .history_queries import HistoryQueriesMixin, excerpt, PERMANENT_PATHS, SETTINGS_HISTORY_PATH
 from .history_catalog import HistoryCatalogMixin
+from .operation_types import ExcerptChars, Offset, PageLimit
 
 
 class HistoryMixin(HistoryCatalogMixin, HistoryQueriesMixin):
@@ -315,7 +316,7 @@ class HistoryMixin(HistoryCatalogMixin, HistoryQueriesMixin):
         except Exception as exc:
             return {"status": "pending", "error": str(exc), "next_action": "history_index"}
 
-    def history_retry(self, limit: int = 100):
+    def history_retry(self, limit: PageLimit = 100):
         self._require_format()
         from .history_queries import page
         page(0, limit)
@@ -357,7 +358,7 @@ class HistoryMixin(HistoryCatalogMixin, HistoryQueriesMixin):
         ).stdout.strip()
 
     def history_diff(self, before: str, after: str, paths: list[str] | None = None,
-                     offset: int = 0, max_chars: int = 16000):
+                     offset: Offset = 0, max_chars: ExcerptChars = 16000):
         self._require_format()
         with self.control.guard():
             old, new = self._history_revision(before), self._history_revision(after)
@@ -384,8 +385,8 @@ class HistoryMixin(HistoryCatalogMixin, HistoryQueriesMixin):
         commit: str = "HEAD",
         paths: list[str] | None = None,
         material_id: str | None = None,
-        offset: int = 0,
-        max_chars: int = 16000,
+        offset: Offset = 0,
+        max_chars: ExcerptChars = 16000,
     ):
         self._require_format()
         with self.control.guard():

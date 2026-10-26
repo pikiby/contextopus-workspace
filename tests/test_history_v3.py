@@ -6,7 +6,7 @@ from pcw_runtime.cycles import CycleRuntime
 
 
 def apply(runtime, cycle, changes):
-    plan = runtime.proposal_prepare(cycle, changes)
+    plan = runtime.proposal_prepare(cycle, changes, expected_task_revision=runtime.status(cycle)["task_revision"])
     return plan, runtime.proposal_apply(cycle, plan["proposal_id"], plan["revision"])
 
 

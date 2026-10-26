@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from .layout import WorkspaceLayout
+from .operation_types import Offset, PageLimit, SearchResultLimit
 
 
 def contexts(layout, name=None, offset=0, limit=50):
@@ -14,7 +15,7 @@ def contexts(layout, name=None, offset=0, limit=50):
         for path in sorted(base.iterdir()):
             if path.name.startswith(".") or path.is_symlink() or not path.is_dir():
                 continue
-            if name is not None and name not in (path.name, str(path)):
+            if name is not None and name != path.name:
                 continue
             entries.append({"name": path.name, "path": str(path)})
     return {"contexts": entries[offset:offset + limit], "total": len(entries),
@@ -35,6 +36,6 @@ def projects_search(layout, index, query, limit=10, distance=None):
 
 def register(app):
     app._operation("workspace.contexts", "query", lambda **kw: contexts(app.layout, **kw), {
-        "name": (str | None, None), "offset": (int, 0), "limit": (int, 50)})
+        "name": (str | None, None), "offset": (Offset, 0), "limit": (PageLimit, 50)})
     app._operation("workspace.projects_search", "query", lambda **kw: projects_search(app.layout, app.index, **kw), {
-        "query": (str, ...), "limit": (int, 10), "distance": (float | None, None)})
+        "query": (str, ...), "limit": (SearchResultLimit, 10), "distance": (float | None, None)})

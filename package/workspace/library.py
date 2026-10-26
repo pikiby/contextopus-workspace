@@ -18,7 +18,9 @@ def library(host, action, collection=None, query='', mode='text', type=None, off
             break
         cursor = page['next_offset']
     if action == 'collections':
-        return {'collections': [{'id': name, 'title': name} for name in names]}
+        return {'collections': [{'id': name, 'title': name} for name in names],
+                'views': [{'title': 'Contexts', 'type': 'project'},
+                          {'title': 'All records', 'type': ''}]}
     if collection and collection not in names:
         raise ValueError('Unknown Workspace collection')
     if not names:
@@ -56,6 +58,18 @@ def library(host, action, collection=None, query='', mode='text', type=None, off
             references += metadata_references(material.metadata)
             from contextopus.core.documents.instructions import InstructionLibrary
             instructions = InstructionLibrary(host.layout)
+            bound = []
+            for role, reference in material.metadata.get('instructions', {}).items():
+                try:
+                    instruction_reference = reference[2:-2].split('|', 1)[0] if reference.startswith('[[') else reference
+                    instruction = instructions.read(instruction_reference.removeprefix('core/instructions/'))
+                    item = {'key': ['core', 'instructions', instruction['id']],
+                            'title': instruction['title'], 'description': instruction['description'],
+                            'path': 'core/instructions/' + instruction['path']}
+                except (ValueError, OSError):
+                    item = {'title': reference, 'reference': reference, 'unavailable': True}
+                bound.append({**item, 'label': role})
+                seen.add(tuple(item.get('key', [reference])))
             for reference in dict.fromkeys(references):
                 targets = []
                 try:
@@ -78,7 +92,10 @@ def library(host, action, collection=None, query='', mode='text', type=None, off
                     links.append(item)
                     seen.add(key)
             return {**label(id), 'content': material.content, 'metadata': material.metadata,
-                    'revision': record_revision(material), 'links': links}
+                    'revision': record_revision(material), 'links': links,
+                    'link_groups': [{'title': 'Bound instructions', 'links': bound,
+                                     'empty_message': 'No instructions bound.'}]
+                    if material.path == 'Context.md' or bound else []}
         if action != 'records':
             raise ValueError('Unknown library action')
         records = [label(ident) for ident in sorted(engine.catalog)

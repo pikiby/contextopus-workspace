@@ -23,7 +23,7 @@ def test_optional_cards_and_verbatim_request(workspace):
     assert not (runtime.engine.root / '.tmp').exists()
     assert runtime.cycles_list()['cycles'][0]['user_request'] == text
     clarification = '\nKeep THIS verbatim. '
-    runtime.clarification_add(cycle, clarification)
+    runtime.clarification_add(cycle, clarification, request_id="clarification-1")
     assert runtime.status(cycle)['clarifications'] == [clarification]
     assert runtime.finish(cycle)['status'] == 'closed'
 
@@ -110,7 +110,7 @@ def test_readable_link_targets_and_required_source_guards(workspace):
         with pytest.raises(PCWError, match='incoming'):
             runtime.tmp_delete(a, card['id'], card['revision'], confirmation='Delete')
         with pytest.raises(PCWError, match='cannot depend'):
-            runtime.proposal_prepare(a, [{'key': 'bad', 'content': body, 'description': 'Must remain temporary'}])
+            runtime.proposal_prepare(a, [{'key': 'bad', 'content': body, 'description': 'Must remain temporary'}], expected_task_revision=runtime.status(a)['task_revision'])
 
 
 def test_helper_external_urls_and_system_tmp_are_not_memory_dependencies():
@@ -138,7 +138,7 @@ def test_automatic_cleanup_still_rejects_supplied_stale_revision(workspace):
 def test_apply_rechecks_temporary_targets_created_after_preparation(workspace):
     runtime, _ = workspace
     cycle = start(runtime)
-    proposal = runtime.proposal_prepare(cycle, [{'key': 'fact', 'content': '# Permanent\nSee [[Later]].',
+    proposal = runtime.proposal_prepare(cycle, expected_task_revision=runtime.status(cycle)['task_revision'], changes=[{'key': 'fact', 'content': '# Permanent\nSee [[Later]].',
                                                'description': 'Approval timing evidence'}])
     runtime.tmp_write(cycle, '# Later\nTransient observations')
     with pytest.raises(PCWError, match='cannot depend'):
@@ -159,7 +159,7 @@ def test_metadata_sources_protect_deletion_and_permanent_creation(workspace, fie
     with pytest.raises(PCWError, match='incoming'):
         runtime.tmp_delete(cycle, card['id'], card['revision'], confirmation='Delete')
     with pytest.raises(PCWError, match='cannot depend'):
-        runtime.proposal_prepare(cycle, [{'key': 'bad', 'content': body, 'description': 'Must stay temporary'}])
+        runtime.proposal_prepare(cycle, [{'key': 'bad', 'content': body, 'description': 'Must stay temporary'}], expected_task_revision=runtime.status(cycle)['task_revision'])
 
 
 def test_cross_context_temporary_links_and_manual_permanent_dependencies(workspace):
@@ -172,7 +172,7 @@ def test_cross_context_temporary_links_and_manual_permanent_dependencies(workspa
         foreign_cycle = start(other, 'foreign')
         target = other.tmp_write(foreign_cycle, '# Foreign draft')
         with pytest.raises(PCWError, match='cannot depend'):
-            runtime.proposal_prepare(cycle, [{'key': 'bad', 'content': 'See [[Foreign draft]].',
+            runtime.proposal_prepare(cycle, expected_task_revision=runtime.status(cycle)['task_revision'], changes=[{'key': 'bad', 'content': 'See [[Foreign draft]].',
                                              'description': 'Cannot depend on another context draft'}])
         linked = runtime.tmp_write(cycle, '# Working dependency', links=[target['id']])
         assert runtime.tmp_read(cycle, linked['id'])['link_targets'][0]['workspace'] == 'other'
@@ -198,7 +198,7 @@ def test_cross_context_temporary_links_and_manual_permanent_dependencies(workspa
 def test_temporary_creation_cannot_activate_unresolved_permanent_dependency(workspace):
     runtime, _ = workspace
     cycle = start(runtime)
-    proposal = runtime.proposal_prepare(cycle, [{'key': 'fact', 'content': '# Permanent\nSee [[Future draft]].',
+    proposal = runtime.proposal_prepare(cycle, expected_task_revision=runtime.status(cycle)['task_revision'], changes=[{'key': 'fact', 'content': '# Permanent\nSee [[Future draft]].',
                                                'description': 'An unresolved ordinary link'}])
     runtime.proposal_apply(cycle, proposal['proposal_id'], proposal['revision'], confirmation='Approve')
     with pytest.raises(PCWError, match='Permanent knowledge would depend'):
@@ -326,12 +326,12 @@ def test_historical_project_sources_preserved_but_managed_absent_targets_rejecte
                'findings/R2-nats-clickhouse.md', 'findings/R3-px701-runbook-failures.md',
                'work/W1-diagnostic-foundation.md']]
     content = record_text({'type': 'knowledge', 'sources': sources}, '# Diagnostic contract')
-    proposal = runtime.proposal_prepare(cycle, [{'key': 'diagnostic', 'content': content,
+    proposal = runtime.proposal_prepare(cycle, expected_task_revision=runtime.status(cycle)['task_revision'], changes=[{'key': 'diagnostic', 'content': content,
                                                 'description': 'Preserved historical repository evidence paths'}])
     assert runtime.proposal_apply(cycle, proposal['proposal_id'], proposal['revision'], confirmation='Approve')['status'] == 'applied'
     assert runtime.read(material_id=proposal['created_ids']['diagnostic'])['content'] == content
     for source in ['.tmp/not-yet-created/materials/absent.md', f'tmp/{cycle}/findings/absent.md']:
         body = record_text({'type': 'knowledge', 'sources': [source]}, '# Unsafe dependency')
         with pytest.raises(PCWError, match='cannot depend'):
-            runtime.proposal_prepare(cycle, [{'key': 'unsafe', 'content': body,
+            runtime.proposal_prepare(cycle, expected_task_revision=runtime.status(cycle)['task_revision'], changes=[{'key': 'unsafe', 'content': body,
                                              'description': 'An absent but explicitly managed temporary source'}])

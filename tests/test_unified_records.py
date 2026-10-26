@@ -79,7 +79,7 @@ def put(runtime, body, kind="knowledge", status=None, links=None):
     change = {"key": "new", "content": body, "description": "Records the verified state and the conditions for its use.", "type": kind, "links": links or []}
     if status is not None:
         change["status"] = status
-    proposal = runtime.proposal_prepare(cycle, [change])
+    proposal = runtime.proposal_prepare(cycle, [change], expected_task_revision=runtime.status(cycle)["task_revision"])
     result = runtime.proposal_apply(cycle, proposal["proposal_id"], proposal["revision"])
     assert result["status"] == "applied", result
     return runtime.read(material_id=proposal["created_ids"]["new"])
@@ -105,7 +105,7 @@ def test_migrate_current_preserves_ids_pending_proposal_and_retry(tmp_path, line
     runtime = workspace(tmp_path)
     item = put(runtime, "# State\nVerified before migration")
     cycle = runtime.startup("pending")["cycle_id"]
-    proposal = runtime.proposal_prepare(cycle, [{"material_id": item["id"], "expected_revision": item["revision"], "content": "# State\nApproved later", "description": "Records the state approved after migration."}])
+    proposal = runtime.proposal_prepare(cycle, [{"material_id": item["id"], "expected_revision": item["revision"], "content": "# State\nApproved later", "description": "Records the state approved after migration."}], expected_task_revision=runtime.status(cycle)["task_revision"])
     project = runtime.project_read()
     # Reconstruct the machine flags and proposal contract a real pre-v4 context used.
     rules = runtime.engine.root / "INSTRUCTIONS.md"
@@ -181,21 +181,22 @@ def test_metadata_changes_reuse_vectors_and_conflict_with_old_revision(tmp_path)
     calls = len(factory.calls)
     cycle = runtime.startup("change-status")["cycle_id"]
     change = {"material_id": task["id"], "expected_revision": task["revision"], "status": "completed"}
-    proposal = runtime.proposal_prepare(cycle, [change])
+    proposal = runtime.proposal_prepare(cycle, [change], expected_task_revision=runtime.status(cycle)["task_revision"])
     assert proposal["review_changes"][0]["metadata_changes"]["status"] == {"before": "active", "after": "completed"}
     assert runtime.proposal_apply(cycle, proposal["proposal_id"], proposal["revision"])["status"] == "applied"
     assert len(factory.calls) == calls
     current = runtime.read(material_id=task["id"])
     assert current["revision"] != task["revision"]
     with pytest.raises(PCWError, match="changed"):
-        runtime.proposal_prepare(cycle, [change])
+        runtime.proposal_prepare(cycle, [change], expected_task_revision=runtime.status(cycle)["task_revision"])
     rows = runtime.engine.index.read_rows(runtime.engine.table)
     assert all(json.loads(r["metadata"])["status"] == "completed" for r in rows if r["material_id"] == task["id"])
     runtime.close()
 
 
 @pytest.mark.parametrize("line_ending", ["\n", "\r\n"], ids=["lf", "crlf"])
-def test_interrupted_migration_resumes_and_preserves_legacy_project_approval(tmp_path, line_ending):
+@pytest.mark.parametrize("proposal_state", ["prepared", "applying"])
+def test_interrupted_migration_resumes_and_preserves_legacy_project_approval(tmp_path, line_ending, proposal_state):
     from workspace.runtime import _revision
     runtime = workspace(tmp_path)
     cycle = runtime.startup("change-project")["cycle_id"]
@@ -217,7 +218,9 @@ def test_interrupted_migration_resumes_and_preserves_legacy_project_approval(tmp
                 "before": {"path": "PROJECT.md", "text": legacy_body, "fingerprint": _revision(legacy_body)},
                 "after": {"path": "PROJECT.md", "text": text, "fingerprint": _revision(text)},
             }},
-        }, "prepared")
+        }, proposal_state)
+    proposal_path = runtime._tmp(cycle) / "proposals" / (proposal["proposal_id"] + ".json")
+    original_proposal = proposal_path.read_bytes()
     plan = runtime.upgrade_plan()
     assert plan["ready"], plan
     with patch.object(runtime.engine._adapter, "reconcile", side_effect=OSError("injected interruption")):
@@ -226,6 +229,17 @@ def test_interrupted_migration_resumes_and_preserves_legacy_project_approval(tmp
     assert runtime.upgrade_plan()["resume_revision"] == plan["revision"]
     assert runtime.upgrade_apply(plan["revision"], "Retry")["status"] == "complete"
     assert runtime.project_read()["content"] == legacy_body
+    assert proposal_path.read_bytes() == original_proposal
+    if proposal_state == "prepared":
+        result = runtime.proposal_apply(cycle, proposal["proposal_id"], proposal["revision"])
+        assert result["status"] == "reprepare_required", result
+        assert result["knowledge_changed"] is False
+        result = runtime.proposal_apply(cycle, proposal["proposal_id"], proposal["revision"], "I approve the displayed project change")
+        assert result["status"] == "reprepare_required", result
+        assert runtime.project_read()["content"] == legacy_body
+        assert proposal_path.read_bytes() == original_proposal
+        runtime.close()
+        return
     with pytest.raises(PCWError, match="confirmation"):
         runtime.proposal_apply(cycle, proposal["proposal_id"], proposal["revision"])
     result = runtime.proposal_apply(cycle, proposal["proposal_id"], proposal["revision"], "I approve the displayed project change")

@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 from .runtime import PCWError, _id, _parse
+from .operation_types import Offset, PageLimit
 from .history_events import read_event
 
 
@@ -57,7 +58,7 @@ class HistoryQueriesMixin:
                 "next_offset": offset + limit if len(commits) > limit else None,
                 "coverage": "declared record IDs; use path/text search for older commits" if material_id else "Git history"}
 
-    def history_list(self, offset: int = 0, limit: int = 20, material_id: str | None = None,
+    def history_list(self, offset: Offset = 0, limit: PageLimit = 20, material_id: str | None = None,
                      paths: list[str] | None = None, query: str | None = None,
                      since: str | None = None, until: str | None = None, ref: str = "HEAD"):
         """Filter commit metadata; ID lookup follows declarations across renames and deletions."""
@@ -87,7 +88,7 @@ class HistoryQueriesMixin:
             return self._history_versions(offset, limit, ref, filters, selected, material_id)
 
     def history_search(self, text: str, paths: list[str] | None = None,
-                       offset: int = 0, limit: int = 20, ref: str = "HEAD"):
+                       offset: Offset = 0, limit: PageLimit = 20, ref: str = "HEAD"):
         """Native Git pickaxe: find commits adding/removing occurrences of exact text."""
         self._require_format()
         page(offset, limit)
@@ -97,7 +98,7 @@ class HistoryQueriesMixin:
             selected = self._history_paths(paths) if paths is not None else PERMANENT_PATHS
             return self._history_versions(offset, limit, ref, ["-S" + text], selected)
 
-    def history_changes(self, commit: str = "HEAD", offset: int = 0, limit: int = 50):
+    def history_changes(self, commit: str = "HEAD", offset: Offset = 0, limit: PageLimit = 50):
         """Describe a commit, file changes and declared transformations without file bodies."""
         self._require_format()
         page(offset, limit)

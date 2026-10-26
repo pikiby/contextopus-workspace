@@ -125,7 +125,7 @@ def test_dedicated_finish_exposes_bounded_scope_and_preserves_runtime_guards(mon
     app.execute.return_value = {'status': 'blocked', 'incoming_dependencies': ['other-card']}
     result = value(asyncio.run(mcp.call_tool('finish', {
         'cycle_id': 'selected', 'expected_revision': 'revision', 'confirmation': 'Delete these files',
-        'work_root': str(tmp_path), 'context': 'project',
+        'context': 'project',
     })))
     assert result['status'] == 'blocked'
     assert result['incoming_dependencies'] == ['other-card']
@@ -157,7 +157,7 @@ def test_initialize_delivers_native_tool_routing_and_preserves_real_tool_names(m
                     instructions = initialized.instructions
                     assert "Contextopus MCP tools advertised by this client" in instructions
                     assert "native names may include a server prefix" in instructions
-                    assert "work_root identifies Contextopus data" in instructions
+                    assert "storage is configured by the server and is not a tool argument" in instructions
                     assert "Do not replace Contextopus operations with shell commands" in instructions
                     assert "Native skill loading and obtaining declared external sources" in instructions
                     assert "existing approval rules" in instructions
@@ -181,9 +181,10 @@ def test_workspace_procedure_requires_first_rules_read_and_inherited_query_setti
         install_workspace(tmp_path, app=app)
         procedure = app.query("procedure", {"name": "workspace"})["content"]
     independent = next(line for line in procedure.splitlines() if line.startswith("- **Independent retrieval:**"))
-    assert independent.index('workspace.settings_read(fields=["reread_instructions"])') < independent.index("workspace.instructions_read") < independent.index("workspace.search with inherited settings")
-    assert "obtain and read the complete workspace.instructions_read" in procedure
-    assert "Read workspace.project_read when" in procedure
+    assert independent.index('workspace.preparation_read') < independent.index("workspace.search with inherited settings")
+    assert "complete instructions and the project together" in independent
+    assert "Read the **whole free-form INSTRUCTIONS**" in procedure
+    assert "Read complete INSTRUCTIONS and project from startup" in procedure
     assert "it never replaces the first reading" in procedure
     assert "inherit the selected context's algorithm and limits" in procedure
     assert "omit overrides rather than inventing them" in procedure
@@ -302,7 +303,7 @@ def test_mcp_search_inherits_saved_n_and_keeps_explicit_override(monkeypatch, tm
             mcp, _ = fixture_server(monkeypatch, tmp_path, app=app)
             for override, count, effective_n in [({}, 2, 2), ({'N': None}, 2, 2), ({'N': 10}, 3, 10)]:
                 result = value(asyncio.run(mcp.call_tool('read', {
-                    'operation': 'workspace.search', 'work_root': str(tmp_path), 'context': 'one',
+                    'operation': 'workspace.search', 'context': 'one',
                     'arguments': {'query': 'facts', 'types': ['knowledge'], **override},
                 })))
                 assert len(result['results']) == count
@@ -451,9 +452,9 @@ def test_guide_exposes_runtime_proposal_change_contract(monkeypatch, tmp_path):
             {'material_id': 'existing', 'expected_revision': 'revision', 'status': None},
             {'material_id': 'existing', 'expected_revision': 'revision', 'delete': True},
         ]
-        assert model.model_validate({'cycle_id': 'cycle', 'changes': changes}).changes == changes
+        assert model.model_validate({'cycle_id': 'cycle', 'expected_task_revision': 'revision', 'changes': changes}).changes == changes
         with pytest.raises(ValidationError, match='title'):
-            model.model_validate({'cycle_id': 'cycle', 'changes': [
+            model.model_validate({'cycle_id': 'cycle', 'expected_task_revision': 'revision', 'changes': [
                 {'key': 'new', 'content': '# Heading', 'title': 'Guessed field'}]})
 
 

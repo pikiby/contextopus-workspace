@@ -50,7 +50,9 @@ with tempfile.TemporaryDirectory(prefix='workspace-reservation-upgrade-') as tem
         assert updated['state'] == 'enabled', updated
         assert all((root / p).read_bytes() == content for p, content in before.items())
         assert app.query('workspace.proposal_read', {'cycle_id': cycle, 'proposal_id': pending['proposal_id']})['revision'] == pending['revision']
-        assert app.execute('workspace.proposal_apply', {'cycle_id': cycle, 'proposal_id': pending['proposal_id'], 'expected_revision': pending['revision']})['status'] == 'applied'
+        blocked = app.execute('workspace.proposal_apply', {'cycle_id': cycle, 'proposal_id': pending['proposal_id'], 'expected_revision': pending['revision']})
+        assert blocked['status'] == 'reprepare_required', blocked
+        assert all((root / p).read_bytes() == content for p, content in before.items())
         # Replacing module code preserves format 5. The reviewed context migration
         # is a separate operation and must precede starting work on format 6.
         migration = app.query('workspace.upgrade_plan')
@@ -61,6 +63,15 @@ with tempfile.TemporaryDirectory(prefix='workspace-reservation-upgrade-') as tem
         })
         assert app.query('workspace.upgrade_plan')['compatible']
         assert 'Keep verified information.' in app.query('workspace.instructions_read')['content']
+        project = app.query('workspace.project_read')
+        assignment = app.query('workspace.status', {'cycle_id': cycle})
+        app.execute('workspace.reserve', {'cycle_id': cycle, 'material_ids': [project['id']], 'reason': 'Reprepare the preserved legacy proposal'})
+        pending = app.execute('workspace.proposal_prepare', {
+            'cycle_id': cycle, 'proposal_id': pending['proposal_id'],
+            'expected_task_revision': assignment['task_revision'],
+            'changes': [{'material_id': project['id'], 'expected_revision': project['revision'], 'status': 'verified'}],
+        })
+        assert app.execute('workspace.proposal_apply', {'cycle_id': cycle, 'proposal_id': pending['proposal_id'], 'expected_revision': pending['revision']})['status'] == 'applied'
         other = app.execute('workspace.startup', {'request_id': 'new-work', 'user_request': 'Independent work'})['cycle_id']
         lease = app.execute('workspace.reserve', {'cycle_id': cycle, 'material_ids': [project['id']], 'reason': 'Upgrade acceptance edit'})
         assert app.query('workspace.read', {'material_id': project['id']})['status'] == 'verified'
@@ -73,7 +84,7 @@ with tempfile.TemporaryDirectory(prefix='workspace-reservation-upgrade-') as tem
     with ProcessResources(Factory()) as resources, Application(root, 'test', resources=resources, discover=False) as app:
         assert app.query('workspace.reservations')['total'] == 1
         assert app.query('workspace.read', {'material_id': project['id']})['status'] == 'verified'
-    print(json.dumps({'old_version': '1.5.0', 'new_version': '1.7.0', 'module_update': 'passed',
+    print(json.dumps({'old_version': '1.5.0', 'new_version': json.loads((Path(new) / 'module.json').read_text(encoding='utf-8'))['version'], 'module_update': 'passed',
                       'unchanged_source_bytes': len(before), 'pending_review_preserved': True,
-                      'legacy_proposal_applied': True, 'competing_write_blocked': True,
+                      'legacy_proposal_reprepared_and_applied': True, 'competing_write_blocked': True,
                       'reads_available': True, 'ownership_survives_restart': True}))

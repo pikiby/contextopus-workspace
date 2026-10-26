@@ -121,7 +121,7 @@ def test_write_read_reconcile_and_move_derive_tags(tmp_path):
         assert all(json.loads(row["metadata"])["tags"] == ["custom", "context/alpha"]
                    for row in rows if row["material_id"] == item["id"])
         cycle = runtime.startup("update-tagged-record")["cycle_id"]
-        proposal = runtime.proposal_prepare(cycle, [{
+        proposal = runtime.proposal_prepare(cycle, expected_task_revision=runtime.status(cycle)["task_revision"], changes=[{
             "material_id": item["id"], "expected_revision": observed["revision"],
             "content": "# Tagged\nUpdated useful facts",
             "description": "Updated useful facts with their context and custom tags preserved",

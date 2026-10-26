@@ -2,14 +2,34 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from .runtime import PCWError, _id, _parse, _revision
 from .records import validate_description
+from .operation_types import Offset, PageLimit
 
 
 class AuditMixin:
-    def audit(self, cycle_id: str | None = None, offset: int = 0, limit: int = 50):
+    def audit(
+        self, cycle_id: str | None = None, offset: Offset = 0, limit: PageLimit = 50,
+        scope: Literal["all"] | None = None, request_id: str | None = None,
+        cursor: str | None = None, scope_id: str | None = None,
+        delta_refresh: bool = False, delta_cursor: str | None = None,
+    ):
         # Audit must inspect repairable source defects rather than requiring the
         # very checks it reports to pass before enumeration.
+        if any(value is not None for value in (scope, request_id, cursor, scope_id, delta_cursor)) or delta_refresh:
+            from .review_scopes import ReviewScopes
+            # A supplied cycle is checked, but its presence neither creates a
+            # temporary folder nor determines the immutable inventory bounds.
+            if cycle_id:
+                with self._cycle(cycle_id):
+                    pass
+            return ReviewScopes(self).page(
+                "audit", scope=scope, request_id=request_id, cursor=cursor,
+                scope_id=scope_id, delta_refresh=delta_refresh, delta_cursor=delta_cursor,
+                offset=offset, limit=limit,
+            )
         self._require_format(storage=False)
         if (
             type(offset) is not int

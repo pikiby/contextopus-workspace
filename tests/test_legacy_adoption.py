@@ -54,7 +54,8 @@ def test_sparse_legacy_needs_reviewed_rules_preserves_originals(
     expected_tmp = (original / "tmp/result.md").read_bytes()
     if relocate_first:
         relocation.apply(relocation.plan(source, tmp_path / "destination"))
-    runtime = CycleRuntime(source, "old", provider_factory=Factory())
+    runtime = CycleRuntime(tmp_path / "destination" if relocate_first else source,
+                           "old", provider_factory=Factory())
     try:
         initial = runtime.upgrade_plan()
         assert initial["from_version"] == 0
@@ -298,14 +299,10 @@ def test_public_legacy_adoption_preserves_pending_rule_basis(tmp_path, monkeypat
             })["status"] == "applied"
             edit = {"cycle_id": "awaiting-review", "proposal_id": "legacy-edit",
                     "expected_revision": revisions["legacy-edit"], "confirmation": "Original knowledge approval"}
-            if existing_rules:
-                assert app.execute("workspace.proposal_apply", edit)["status"] == "applied"
-                assert runtime.read(material_id="topic.md")["content"] == changed["text"]
-            else:
-                with pytest.raises(PCWError, match="Instructions changed.*prepare"):
-                    app.execute("workspace.proposal_apply", edit)
-                assert runtime.read(material_id="topic.md")["content"] == snapshot["text"]
-                assert runtime._records()["cycles"]["awaiting-review"]["proposals"]["legacy-edit"] == pending
+            blocked = app.execute("workspace.proposal_apply", edit)
+            assert blocked["status"] == "reprepare_required" and blocked["knowledge_changed"] is False
+            assert runtime.read(material_id="topic.md")["content"] == snapshot["text"]
+            assert runtime._records()["cycles"]["awaiting-review"]["proposals"]["legacy-edit"] == pending
             assert all(path.read_bytes() == raw for path, raw in originals.items())
     finally:
         runtime.close()

@@ -165,17 +165,27 @@ def test_pending_proposal_overlay_retry_and_old_approval_remain_bound(tmp_path, 
         overlay = a._execution_plan(plan)
         new_id = mapping(p, 'alpha', 'knowledge/workfile.md')
         assert set(overlay['entries']) == {ident, new_id} and overlay['created_ids']['new'] == new_id and overlay['task_id'] == ident
+        blocked = a.proposal_apply(cycle, proposal, _revision(raw), confirmation='Original approval')
+        assert blocked['status'] == 'reprepare_required' and blocked['knowledge_changed'] is False
+        assert path.read_text() == raw
+        material = a.read(material_id=ident)
+        refreshed = a.proposal_prepare(cycle, [
+            {'material_id': ident, 'expected_revision': material['revision'],
+             'content': _parse(overlay['entries'][ident]['after']['text'])[1],
+             'description': 'Reviewed existing fact after technical identity migration.'},
+            {'key': 'new', 'content': _parse(overlay['entries'][new_id]['after']['text'])[1],
+             'description': 'Reviewed new fact after technical identity migration.', 'links': [ident]},
+        ], proposal_id=proposal, expected_task_revision=a.status(cycle)['task_revision'])
+        new_id = refreshed['created_ids']['new']
         if semantic_conflict:
-            material = a.read(material_id=ident)
             current = a.engine.root / material['path']
             current.write_bytes(current.read_bytes() + b'Unapproved intervening content.')
             with pytest.raises(PCWError, match='changed|conflict'):
-                a.proposal_apply(cycle, proposal, _revision(raw), confirmation='Original approval')
-            assert path.read_text() == raw
+                a.proposal_apply(cycle, proposal, refreshed['revision'], confirmation='Approve the fresh review')
             return
-        assert a.proposal_apply(cycle, proposal, _revision(raw), confirmation='Approve the unchanged original review')['status'] == 'applied'
+        assert a.proposal_apply(cycle, proposal, refreshed['revision'], confirmation='Approve the fresh review')['status'] == 'applied'
         assert 'Reviewed later.' in a.read(material_id='index.md')['content']
-        assert a.read(material_id='workfile.md')['id'] == new_id
+        assert a.read(material_id=new_id)['id'] == new_id
         assert a.engine.resolve(new_id).links == [ident]
         # Approval is still checked against the original immutable proposal bytes.
         changed = json.loads(raw)
@@ -240,8 +250,9 @@ def test_foreign_pending_creations_are_reserved_before_either_file_exists(tmp_pa
             SimpleNamespace(hex=reserved_id.removesuffix('.md')), SimpleNamespace(hex='f' * 32)]):
             assert a.engine._allocate_material_id() == 'f' * 32 + '.md'
         for r in (a, b):
-            assert r.proposal_apply('cycle', 'new', proposals[r.engine.workspace], confirmation='Approve reviewed new fact')['status'] == 'applied'
-            assert r.read(material_id='workfile.md')['id'] == mapping(initial, r.engine.workspace, 'knowledge/workfile.md')
+            blocked = r.proposal_apply('cycle', 'new', proposals[r.engine.workspace], confirmation='Approve reviewed new fact')
+            assert blocked['status'] == 'reprepare_required' and blocked['knowledge_changed'] is False
+            assert mapping(initial, r.engine.workspace, 'knowledge/workfile.md') not in r.engine.materials
     finally: a.close(); b.close()
 
 
@@ -253,7 +264,7 @@ def test_identity_map_survives_supported_root_relocation(tmp_path):
     expected = a.upgrade_plan()['identity_map']
     a.close(); b.close()
     relocation.apply(relocation.plan(source, destination))
-    moved = CycleRuntime(source, 'alpha', provider_factory=Factory())
+    moved = CycleRuntime(destination, 'alpha', provider_factory=Factory())
     try:
         plan = moved.upgrade_plan()
         assert plan['ready'] and plan['identity_map'] == expected
@@ -397,7 +408,14 @@ def test_exact_foreign_wikilink_is_not_realiased_to_local_legacy_id(tmp_path, pe
             assert overlay['entries'][work]['after']['link_ids'] == ['index.md']
             assert overlay['link_targets']['index.md']['workspace'] == 'current'
             assert overlay['link_targets']['index.md']['path'] == 'knowledge/Stable modern.md'
-            assert a.proposal_apply('cycle', 'foreign', _revision(raw), confirmation='Approve this exact original review')['status'] == 'applied'
+            assert a.proposal_apply('cycle', 'foreign', _revision(raw), confirmation='Approve this exact original review')['status'] == 'reprepare_required'
+            material = a.read(material_id=work)
+            refreshed = a.proposal_prepare('cycle', [
+                {'material_id': work, 'expected_revision': material['revision'],
+                 'content': _parse(overlay['entries'][work]['after']['text'])[1],
+                 'description': 'Reviewed exact foreign target after identity migration.'},
+            ], proposal_id='foreign', expected_task_revision=a.status('cycle')['task_revision'])
+            assert a.proposal_apply('cycle', 'foreign', refreshed['revision'], confirmation='Approve the fresh exact foreign target')['status'] == 'applied'
             assert a.engine.resolve(work).links == ['index.md']
             assert 'Reviewed foreign target.' in a.read(material_id=work)['content']
         assert current.read(material_id='index.md')['content'] == '# Foreign canonical\nRetain this target.'

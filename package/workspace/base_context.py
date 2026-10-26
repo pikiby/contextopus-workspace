@@ -270,6 +270,12 @@ class BaseContext:
         if pending['stage'] == 'prepare':
             opened = runtime.startup('base-install-' + revision[:32])
             pending['cycle_id'] = opened['cycle_id']
+            if 'task_revision' not in pending:
+                if opened['clarification_count']:
+                    return {'status': 'needs_review', 'plan_revision': revision,
+                            'reason': 'The base-install cycle has clarifications not covered by the reviewed bundle plan.',
+                            'active_rules_changed': False}
+                pending['task_revision'] = opened['task_revision']
             self._write(state)
             changes = []
             project = runtime.project_read()
@@ -299,19 +305,21 @@ class BaseContext:
                     saved = runtime._load_plan(pending['cycle_id'], ident, entry)
                     if entry['state'] == 'discarded':
                         proposal = runtime.proposal_prepare(pending['cycle_id'], changes,
+                            expected_task_revision=pending['task_revision'],
                             proposal_id=ident, summary='Update Contextopus product documentation')
                     else:
                         proposal = {'proposal_id': ident, 'revision': entry['revision'],
                                     'status': entry['state'], 'created_ids': saved['created_ids']}
                 else:
                     proposal = runtime.proposal_prepare(pending['cycle_id'], changes,
+                        expected_task_revision=pending['task_revision'],
                         no_changes_reason='Packaged documents already match' if not changes else None,
                         summary='Update Contextopus product documentation')
             except PCWError as exc:
                 # Size-policy failures stay recoverable without modifying instructions.
                 return {'status': 'needs_review', 'error': str(exc), 'plan_revision': revision,
                         'next_action': 'review_base_context_instructions', 'active_rules_changed': False}
-            if proposal['status'] == 'needs_split':
+            if proposal['status'] in {'needs_split', 'task_changed', 'reprepare_required'}:
                 return {**proposal, 'plan_revision': revision, 'active_rules_changed': False}
             pending.update(stage='finish' if proposal['status'] == 'no_changes' else 'apply', proposal_id=proposal['proposal_id'],
                            proposal_revision=proposal['revision'], created_ids=proposal['created_ids'])

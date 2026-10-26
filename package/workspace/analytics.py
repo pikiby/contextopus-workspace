@@ -14,6 +14,7 @@ import uuid
 
 from .runtime import PCWError
 from .analytics_migration import AnalyticsMigrationMixin
+from .operation_types import BlobBytes, EventIDs, EventLimit, ExcerptChars, Offset, PageLimit, ReferenceIndex
 
 
 SECRET_KEY = re.compile(
@@ -362,8 +363,8 @@ class AnalyticsMixin(AnalyticsMigrationMixin):
         tool: str | None = None,
         since: str | None = None,
         until: str | None = None,
-        offset: int = 0,
-        limit: int = 50,
+        offset: Offset = 0,
+        limit: EventLimit = 50,
         import_id: str | None = None,
         workspaces: list[str] | None = None,
         instruction_revision: str | None = None,
@@ -392,7 +393,7 @@ class AnalyticsMixin(AnalyticsMigrationMixin):
         tool: str | None = None, since: str | None = None, until: str | None = None,
         import_id: str | None = None, instruction_revision: str | None = None,
         runtime_version: str | None = None, procedures_revision: str | None = None,
-        max_events: int = 1000, cursor: str | None = None, max_blob_bytes: int = 4000000,
+        max_events: EventLimit = 1000, cursor: str | None = None, max_blob_bytes: BlobBytes = 4000000,
     ):
         from .analytics_queries import analytics_report
         if target_workspace is not None and workspaces is not None:
@@ -407,14 +408,14 @@ class AnalyticsMixin(AnalyticsMigrationMixin):
             max_events=max_events, cursor=cursor, max_blob_bytes=max_blob_bytes,
         )
 
-    def analytics_read(self, event_id: str, max_chars: int = 16000, offset: int = 0, limit: int = 50):
+    def analytics_read(self, event_id: str, max_chars: ExcerptChars = 16000, offset: Offset = 0, limit: PageLimit = 50):
         return self._events().read(event_id, max_chars, offset, limit)
 
-    def analytics_blob_read(self, blob_id: str, offset: int = 0, max_chars: int = 16000):
+    def analytics_blob_read(self, blob_id: str, offset: Offset = 0, max_chars: ExcerptChars = 16000):
         return self._events().blob_read(blob_id, offset, max_chars)
 
-    def analytics_reference_read(self, event_id: str, reference_index: int = 0,
-                                 offset: int = 0, max_chars: int = 16000):
+    def analytics_reference_read(self, event_id: str, reference_index: ReferenceIndex = 0,
+                                 offset: Offset = 0, max_chars: ExcerptChars = 16000):
         from .history_queries import excerpt
         from .runtime import _parse
         if type(reference_index) is not int or reference_index < -1:
@@ -456,7 +457,7 @@ class AnalyticsMixin(AnalyticsMigrationMixin):
             if other is not None:
                 other.close()
 
-    def analytics_evaluate(self, criterion: str, assessment: str, event_ids: list[str],
+    def analytics_evaluate(self, criterion: str, assessment: str, event_ids: EventIDs,
                            scope: dict | None = None, instruction_basis: list[dict] | None = None):
         from .analytics_queries import validate_assessment_scope
         if not criterion.strip() or not assessment.strip() or not event_ids:

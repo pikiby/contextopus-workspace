@@ -33,24 +33,31 @@ def downgrade(r, line_ending="\n"):
 
 
 def test_context_root_index_update_history_and_full_required_rules(tmp_path):
-    with runtime(tmp_path) as r:
+    from contextopus.startup import Application
+    from contextopus.core.resources import ProcessResources
+    from contextopus.core.embeddings import default_config
+    with runtime(tmp_path) as r, ProcessResources(Factory()) as resources, Application(
+        tmp_path, resources=resources, discover=False
+    ) as app:
+        app.index.embeddings = default_config()
+        r.instruction_reconcile = lambda: app.execute("core.instructions_reconcile")
         project = r.project_read()
         assert project["path"] == "Context.md" and project["type"] == "project"
         assert not list(r.engine.knowledge.glob("*Project*"))
         assert any(m.path == "Context.md" for m in r.engine.materials.values())
         rules = r.instructions_read()
-        store = library(r)
-        store.save("agents.md", {"id": "agent-rules", "type": "instruction"}, "Full agent rules.\n")
-        path = r.engine.root / "Context.md"
-        metadata, body = _parse(path.read_text())
-        metadata["instructions"]["agents"] = "[[agents]]"
-        path.write_text(record_text(metadata, body))
         opened = r.startup("work")
-        assert [d["content"] for d in opened["instructions"]["documents"]][-1] == "Full agent rules.\n"
         cycle = opened["cycle_id"]
+        binding = r.instruction_bind_prepare(cycle, "agents", "agent-rules", project["revision"],
+            expected_task_revision=opened["task_revision"],
+            new_instruction={"path": "agents.md", "title": "Agent rules",
+                             "description": "Rules for delegated work", "content": "Full agent rules.\n"})
+        applied = r.proposal_apply(cycle, binding["proposal_id"], binding["revision"], "Apply this exact binding")
+        assert applied["status"] == "applied", applied
+        assert [d["content"] for d in r.instructions_read()["documents"]][-1] == "Full agent rules.\n"
         project = r.project_read()
         reservation = r.reserve(cycle, [project["id"]], "Update purpose")
-        p = r.proposal_prepare(cycle, [{"material_id": project["id"], "expected_revision": project["revision"],
+        p = r.proposal_prepare(cycle, expected_task_revision=opened["task_revision"], changes=[{"material_id": project["id"], "expected_revision": project["revision"],
             "content": "# Revised purpose\n", "description": "Revised context scope"}])
         assert r.proposal_apply(cycle, p["proposal_id"], p["revision"])["status"] == "applied"
         assert r.project_read()["path"] == "Context.md"
@@ -103,7 +110,7 @@ def test_dependency_change_invalidates_knowledge_review(tmp_path):
         metadata["instructions"]["agents"] = "[[agents]]"
         path.write_text(record_text(metadata, body))
         cycle = r.startup("work")["cycle_id"]
-        proposal = r.proposal_prepare(cycle, [{"key": "fact", "content": "Verified fact", "description": "A verified fact"}])
+        proposal = r.proposal_prepare(cycle, [{"key": "fact", "content": "Verified fact", "description": "A verified fact"}], expected_task_revision=r.status(cycle)["task_revision"])
         doc = store.read("agents")
         store.save(doc["path"], doc["metadata"], "New agent rules", doc["revision"])
         with pytest.raises(PCWError, match="Instructions changed"):
@@ -117,11 +124,9 @@ def test_instruction_role_mapping_uses_normal_review_and_independent_approval(tm
         opened = r.startup("bind", user_request="Bind the Agents rules to this context")
         cycle = opened["cycle_id"]
         project = r.project_read()
-        r.reserve(cycle, [project["id"]], "Bind the requested Agents instruction")
         metadata = _parse((r.engine.root / "Context.md").read_text())[0]
-        refs = {**metadata["instructions"], "agents": "[[agents]]"}
-        proposal = r.proposal_prepare(cycle, [{"material_id": project["id"],
-            "expected_revision": project["revision"], "instructions": refs}])
+        refs = {**metadata["instructions"], "agents": "[[agent-rules]]"}
+        proposal = r.instruction_bind_prepare(cycle, "agents", "agent-rules", project["revision"], expected_task_revision=opened["task_revision"])
         assert proposal["approval_required"] is True
         assert proposal["review_changes"][0]["metadata_changes"]["instructions"]["after"] == refs
         with pytest.raises(PCWError, match="confirmation"):

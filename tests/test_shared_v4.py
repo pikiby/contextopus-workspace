@@ -23,7 +23,7 @@ def context(root, name, factory=None):
 
 def save(runtime, text, links=None):
     cycle = runtime.startup("save-" + str(len(runtime._records()["cycles"])))["cycle_id"]
-    prepared = runtime.proposal_prepare(cycle, [{"key": "new", "content": text,
+    prepared = runtime.proposal_prepare(cycle, expected_task_revision=runtime.status(cycle)["task_revision"], changes=[{"key": "new", "content": text,
                                                "description": "Facts used to verify shared context retrieval and links",
                                                "links": links or []}])
     assert runtime.proposal_apply(cycle, prepared["proposal_id"], prepared["revision"])["status"] == "applied"
@@ -49,9 +49,9 @@ def test_categories_prefilter_links_rules_and_shared_reconcile(tmp_path):
         assert a.engine.root.name == "alpha"
         cycle = a.startup("delete")["cycle_id"]
         with pytest.raises(PCWError, match="explicitly update"):
-            a.proposal_prepare(cycle, [{"material_id": one["id"], "expected_revision": one["revision"], "delete": True}])
+            a.proposal_prepare(cycle, [{"material_id": one["id"], "expected_revision": one["revision"], "delete": True}], expected_task_revision=a.status(cycle)["task_revision"])
         with pytest.raises(PCWError, match="Unknown material"):
-            a.proposal_prepare(cycle, [{"material_id": two["id"], "expected_revision": two["revision"], "content": "bad"}])
+            a.proposal_prepare(cycle, [{"material_id": two["id"], "expected_revision": two["revision"], "content": "bad"}], expected_task_revision=a.status(cycle)["task_revision"])
     finally:
         a.close(); b.close()
 
@@ -64,7 +64,7 @@ def test_rename_retains_yaml_id_links_and_embeddings(tmp_path):
     assert _parse((runtime.engine.root / item["path"]).read_text(encoding="utf-8"))[0]["id"] == item["id"]
     calls = len(factory.calls)
     cycle = runtime.startup("rename")["cycle_id"]
-    p = runtime.proposal_prepare(cycle, [{"material_id": item["id"], "expected_revision": item["revision"], "path": "guides/Подключение.md"}])
+    p = runtime.proposal_prepare(cycle, [{"material_id": item["id"], "expected_revision": item["revision"], "path": "guides/Подключение.md"}], expected_task_revision=runtime.status(cycle)["task_revision"])
     runtime.proposal_apply(cycle, p["proposal_id"], p["revision"])
     result = runtime.read(material_id=item["id"])
     assert result["path"] == "knowledge/guides/Подключение.md"
@@ -144,7 +144,7 @@ def test_missing_yaml_or_legacy_sources_detected_with_current_marker(tmp_path):
 def test_old_source_syntax_is_normalized_before_review(tmp_path):
     runtime = context(tmp_path, "one")
     cycle = runtime.startup("legacy-author")["cycle_id"]
-    p = runtime.proposal_prepare(cycle, [{"key": "a", "content": "# Fact\n```yaml\nrequired_sources:\n- url: file:///tmp/example\n  extract: Specific field\n```\n",
+    p = runtime.proposal_prepare(cycle, expected_task_revision=runtime.status(cycle)["task_revision"], changes=[{"key": "a", "content": "# Fact\n```yaml\nrequired_sources:\n- url: file:///tmp/example\n  extract: Specific field\n```\n",
         "description": "Explains the fact's source dependency and the specific field that must be obtained before use."}])
     shown = p["review_changes"][0]["body_changes"][0]["after"]
     assert "sources:" in shown and "reference:" in shown and "instruction:" in shown
@@ -211,7 +211,7 @@ def test_duplicate_yaml_ids_and_paths_are_rejected(tmp_path):
         (b.engine.knowledge / "Different-name.md").unlink()
         cycle = a.startup("collision")["cycle_id"]
         with pytest.raises(PCWError, match="destination path"):
-            a.proposal_prepare(cycle, [{"key": "x", "path": "same.md", "content": "X", "description": "Records the first independent fact used to check destination collisions."},
+            a.proposal_prepare(cycle, expected_task_revision=a.status(cycle)["task_revision"], changes=[{"key": "x", "path": "same.md", "content": "X", "description": "Records the first independent fact used to check destination collisions."},
                                       {"key": "y", "path": "same.md", "content": "Y", "description": "Records the second independent fact used to check destination collisions."}])
     finally:
         a.close(); b.close()

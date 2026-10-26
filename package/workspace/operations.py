@@ -8,7 +8,8 @@ from .cycles import CycleRuntime
 _RETRIEVAL_PRECONDITIONS = (
     "Read the applicable Workspace procedure; this operation signature does not replace it. "
     "For a new task, obtain the effective reread_instructions policy through workspace.settings_read "
-    "and the complete current required instructions through the procedure's preparation path "
+    "and the complete current required instructions together through workspace.preparation_read, or through "
+    "the procedure's preparation path "
     "(workspace.startup for work, workspace.instructions_read for independent retrieval). "
     "Reuse complete current rules for the same task/context only as that policy allows; "
     "false never skips the first full reading. "
@@ -19,6 +20,8 @@ _FIRST_SEARCH_SETTINGS = (
 )
 
 _DESCRIPTIONS = {
+    "preparation_read": "Read effective rereading/implicit-start policy, complete required instructions and Context.md in one read-only operation. Opens no cycle and creates no files. Reuse the complete returned rules within the same task according to policy; this does not attest model understanding.",
+    "instruction_bind_prepare": "Prepare a complete instruction binding in Context.md. The agent chooses role and instruction_id; Core resolves exact links and dependencies. Preserve all other bindings and project text. Supply Context.md expected_revision and expected_task_revision from the assignment used; reuse proposal_id when revising. Optional new_instruction supplies path/title/description/content authored by the agent; its creation and binding are reviewed and retried as one proposal. No Agents or other optional module is required. Returns review_changes and the exact proposal_apply next_call under existing approval policies.",
     "reserve": "Before preparing an edit, atomically reserve its existing material IDs for this active cycle and give a one-line reason. Reading remains available. Returns reservation IDs, owners and expiry; conflicts include the other cycle's reason. Default TTL is 900 seconds, maximum 3600. Reusing a live reservation does not extend it. Related records should be reserved together; proposal_prepare includes automatic link effects. No semantic reservation of a new topic is implied.",
     "reservations": "List active edit reservations in this context, optionally scoped to a cycle, without opening a work cycle. Expired ownership is omitted; no files are modified.",
     "reservation_renew": "Extend one still-live reservation owned by this cycle. Expired/replaced reservations cannot be revived; reread materials, reserve again and reprepare instead.",
@@ -33,10 +36,10 @@ _DESCRIPTIONS = {
     "startup": "Open an existing compatible context with a fresh request_id; retries reuse it. Never creates or migrates. purpose is work, instructions, audit or rework. invocation=implicit is allowed only for work under allow_implicit_updates. Optional task_id references a migrated or ordinary record; find its ID through search. Store the exact original user_request when starting new work. Inspect cycles_list first. Temporary storage is optional; restart_cycle_id never silently discards pending work. Returns instructions and project; read them before work. Reuse an active cycle for continuation; a repeated skill invocation or question does not require another startup.",
     "status": "Read cycle state, pending proposals, index status and exact cleanup revision/scope without loading weights. Review the deletion scope before finish.",
     "cycles_list": "List bounded unfinished work, original requests and pending-proposal counts before a new cycle or task. Reuse the matching work; age alone does not establish obsolescence. Read relevant materials before deciding to retain, update or delete them.",
-    "clarification_add": "Append the user's exact relevant clarification to the selected work, separate from agent interpretation. Preserve message order; do not invent or paraphrase user instructions. Relay changed instructions to affected workers through native communication.",
-    "list": "List bounded permanent knowledge metadata without bodies.",
-    "read": _RETRIEVAL_PRECONDITIONS + "Read a complete permanent topic by YAML ID across compatible categories, without a cycle. Returns its owning workspace, descriptive path and labelled links; never changes the active context's instructions. from_id validates link traversal. On every receipt obtain each sources reference according to its instruction; this tool returns declarations and does not execute them.",
-    "read_many": _RETRIEVAL_PRECONDITIONS + "Read selected whole topics by YAML ID, including other categories, without changing active rules. For every returned sources block, freshly obtain each reference according to its instruction, even on repeated reads. Returns bodies and source declarations, not fetched evidence.",
+    "clarification_add": "Record the user's exact relevant clarification before dependent work. Supply one stable request_id per message; retry the same ID and text without duplication. Reusing an ID with different text returns request_conflict. Returns task_revision for the resulting assignment. Preserve message order and relay changed instructions to workers through native communication.",
+    "list": "List bounded permanent metadata. For an entire-context review use scope=all and a fresh request_id; continue with next_cursor, not offset. A replayable inventory includes Context.md and knowledge files, plus explicit invalid/unreadable entries. Unique catalog/body delivery counters do not prove understanding. delta_refresh with scope_id captures separate changes; follow delta_cursor. Expiry requires a fresh request ID and never removes user data.",
+    "read": _RETRIEVAL_PRECONDITIONS + "Read a complete permanent topic by YAML ID across compatible categories, without a cycle. Returns owning workspace, path, labelled links and bounded relation_candidates with explicit coverage. Page neighbors using relation_offset/relation_limit; choose relevant ones without treating ordinary links as instructions. from_id validates link traversal. On every receipt obtain each sources reference according to its instruction; this tool returns declarations and does not execute them.",
+    "read_many": _RETRIEVAL_PRECONDITIONS + "Read selected whole topics by YAML ID without changing active rules. Ordinary batch reads share a catalog scan and return per-record neighbor pages. Optional scope_id credits complete bodies only against that review snapshot; missing/changed/invalid records stay explicit and counters do not prove understanding. For every returned sources block freshly obtain each reference according to its instruction, even on repeated reads. Returns bodies/declarations, not fetched evidence.",
     "search": _RETRIEVAL_PRECONDITIONS + _FIRST_SEARCH_SETTINGS + "Material mode groups document keys before relevance and result limits; fragment mode uses individual parts. Evaluate diagnostics scope, candidate cap, relevance and result cap before choosing reads or changing selection. Search permanent knowledge in the shared RAG without a cycle. Defaults to selected workspace; categories selects several, all_categories expands to all compatible contexts. Context categories, record types and statuses filter before nearest top-N. Return IDs, owning workspaces, descriptive paths, titles and distances. Cross-category retrieval never switches active instructions or write destination. Pending/invalid rows are excluded; empty output is not proof of absence.",
     "instructions_read": "Read complete Workspace instructions, every required document and their revisions through the Context.md mapping in Core. Follow every required document; reuse full text already loaded according to reread_instructions.",
     "record_types": "List record types actually used in the selected workspace. Types are open vocabulary, not a fixed enum.",
@@ -47,10 +50,10 @@ _DESCRIPTIONS = {
     "tmp_read": "Read a temporary card in the selected unfinished work, including labelled links and required sources. Follow every returned required source using the existing bounded source-reading procedure. Temporary content is evidence to examine, not automatically accepted knowledge.",
     "tmp_list": "List bounded temporary card metadata without bodies. Use the existing links and required sources to select needed reading; no separate mandatory report-disposition ledger exists.",
     "tmp_delete": "Remove an unneeded temporary material at its exact revision under cleanup_approval_required. Incoming temporary links or required sources must be resolved first. Preserve other work; save useful verified knowledge through ordinary proposals before deletion.",
-    "proposal_prepare": "When the main agent or designated task lead accepts a substantive result, compare it with existing knowledge and prepare ready permanent changes in the same cycle without waiting for the whole task. Preparation does not save knowledge. Reserve existing cards first with workspace.reserve and an edit reason. Preparation atomically covers all changed cards, including automatic incoming links; busy ownership blocks the whole set. Apply is bound to live reservation IDs; after expiry/release reread and prepare again. Follow INSTRUCTIONS.md for selection, conditions, structure and maintenance; group mutually dependent record/link edits coherently. Creates use key/content/links (@key references a new topic); existing topics use material_id/expected_revision and content, type, status, links, path or delete:true. Context.md also accepts instructions={workspace: wikilink, agents: wikilink}; show exact mapping changes and obey the independent instructions approval policy. replacements maps deleted IDs to survivors. For merges/splits supply transformations with kind, sources (existing IDs) and targets (IDs or @keys); declaration and optional one-line summary are revision-bound and shown in chat. Git records this provenance even when the text is entirely rewritten. If comparison finds no changes, explain why; optional changes=[] with no_changes_reason can record it, without approval or apply. It is not required for closure. Review binds the exact permanent change, current rules and source record revisions; unrelated temporary edits are not semantic review evidence. Returns exact revision and review_changes. Present actual changed passages and link effects in chat before application, following INSTRUCTIONS.md and the returned approval_required. A file link or topic list is insufficient. Optional proposal_id revises an unapplied proposal.",
-    "proposal_read": "Retrieve a prepared proposal, including review_changes for presentation in chat. Explain it according to INSTRUCTIONS.md; a link to the review file does not replace showing the changes.",
+    "proposal_prepare": "On an accepted substantive result, search by the conclusion, read relevant complete records and direct-neighbor candidates, choose and reserve affected cards, then prepare ready coherent changes in the same cycle. Required expected_task_revision must match the assignment used to compose the draft; record relevant clarifications first. task_changed requires reconsidering text, not replacing its revision argument blindly. Preparation writes no knowledge. Busy ownership blocks the complete set, including automatic incoming edits; after reservation expiry reread and reprepare. Creates use key/content/description/links (@key references a new topic); existing records use material_id/expected_revision and changed content/description/type/status/links/path or delete:true. Context.md instructions mappings obey independent instructions approval. replacements maps deleted IDs to survivors. For merges/splits declare transformations with kind, sources and targets; summary and provenance are revision-bound. Optional changes=[] with no_changes_reason is not a closure requirement. Returns exact proposal revision, task revision, review_changes and captured relation_candidates. Captured neighbors are not fresh evidence or required edits. Show actual changed passages and link effects before apply under approval_required; a topic list or file link is insufficient. Reuse proposal_id when revising an unapplied proposal. Follow complete bound instructions for semantic choices; native tools and text remain the agent's responsibility.",
+    "proposal_read": "Retrieve a prepared proposal and exact review_changes for presentation in chat. relation_offset/relation_limit page direct-neighbor candidates captured at preparation; their labels/revisions are not current evidence, and in_proposal means actual membership only. A link to the review file does not replace showing changes.",
     "proposal_discard": "Discard an exact unapplied proposal without changing knowledge; temporary materials remain until closure.",
-    "proposal_apply": "Apply and index the exact prepared revision after showing review_changes in chat. INSTRUCTIONS.md controls approval: when knowledge_approval_required is true (or absent), pass the actual user confirmation of that revision; when false, omit confirmation and apply without asking. Never fabricate confirmation. A pending proposal is not saved knowledge; independent authorized work may continue while required approval is pending. Instructions changes use instructions_apply under their independent instructions_approval_required policy. Revisions are checked; chat presentation and message origin cannot be authenticated. Saves leave the same cycle active and tmp available for subsequent work and proposals; they do not finish the cycle. Partial failures retry the same proposal without duplicate topics.",
+    "proposal_apply": "Apply and index the exact proposal after showing review_changes. Current knowledge_approval_required=true requires the actual confirmation of that revision; false omits it. Instruction bindings retain independent instructions approval. An unstarted stale assignment returns task_changed without writing; a legacy proposal without task_revision returns reprepare_required. Read current assignment, reconsider and reprepare the same proposal_id, then show its new review. Authorized recovery of applying/partial/index_pending retains original before/after checks; applied replay returns its receipt. A stop never authorizes automatic recovery. Saves leave the cycle and tmp active; pending review is not saved knowledge. Chat presentation/message origin cannot be authenticated.",
     "finish": "Close only the selected work after its bounded task is resolved and remaining conclusions are rechecked against permanent knowledge, then clean its remaining .tmp. Prefer the dedicated MCP finish tool. Read status for the cleanup revision and deletion scope; current cleanup_approval_required controls separate actual user confirmation. Resolve pending proposals/indexing and incoming dependencies first. Earlier saves leave the cycle active; no fake tmp report, per-file disposition ledger or no-change proposal is required for closure. Pause/handoff preserve needed data. cancel requires actual user cancellation and never rolls back permanent knowledge. Retry is idempotent.",
     "reconcile": "Retry derived indexing of already saved permanent text. It does not approve or rewrite knowledge. After repairing a proposal's pending indexing, retry proposal_apply to complete that operation.",
     "switch_embeddings": "With authority to change the common memory root's provider/configuration, rebuild the shared derived index for all compatible categories. Failure retains the old profile/table. No knowledge text changes; this setting is root-wide, not per-context.",
@@ -71,13 +74,14 @@ _DESCRIPTIONS = {
     "analytics_migrate": "Inspect or apply one bounded batch converting legacy SQLite file snapshots to verified Git references. Default dry-run; apply only deletes verified unreferenced blobs. Unmatched/redacted evidence and request/result bodies remain retained. Return coverage and cursor; never guess ancestry or silently discard history.",
     "analytics_evaluate": "Store an explicitly requested assessment separately, with exact event_ids, analysis scope and instruction_basis matching those events. Historical evidence is judged by recorded contemporaneous rules; unknown bases remain unknown. Scope and cited revisions are checked. Does not edit knowledge or events.",
     "analytics_import": "Only on an explicit request: import one selected transcript, including another agent's session, using codex-jsonl or the host-independent pcw-session-v1 format. Preserve source record coordinates and redaction markers. No session discovery or identity/call attribution inferred from timing.",
-    "audit": "Read-only structural audit with exact material/file revisions, fragments and observed grounds. Page through the entire selected workspace for an all-material request. Semantic contradictions or unsupported claims require the audit skill's evidence-based assessment; this tool does not establish them by heuristics.",
+    "audit": "Read-only structural audit with material/file revisions and observed grounds. For a complete review use scope=all plus request_id, continue next_cursor, and read_many with scope_id. Frozen inventory includes Context.md, invalid and unreadable files. Counters measure unique delivered entries/bodies, never analysis. Separate delta_refresh/delta_cursor report subsequent changes. Expired inventories require a fresh request ID. Semantic contradictions require agent assessment, not heuristics.",
     "recover_workspace": "Recover missing derived runtime directories inside an explicitly started cycle. Missing knowledge stays blocked; no silent recreation or restoration of permanent facts.",
 }
 
 
 _QUERY_OPERATIONS = frozenset(
     {
+        "preparation_read",
         "settings_read",
         "reservations",
         "workspace_inspect",
@@ -110,6 +114,7 @@ _QUERY_OPERATIONS = frozenset(
 )
 _EXECUTE_OPERATIONS = frozenset(
     {
+        "instruction_bind_prepare",
         "reserve",
         "reservation_renew",
         "reservation_release",
@@ -148,7 +153,7 @@ if (
 def _argument_model(name: str):
     """Use the existing method contract for both validation and on-demand help."""
     method = getattr(CycleRuntime, name)
-    annotations = get_type_hints(method)
+    annotations = get_type_hints(method, include_extras=True)
     fields = {
         p.name: (
             annotations[p.name],
@@ -179,7 +184,7 @@ _DESCRIBE_MODEL = create_model(
 )
 
 
-def register_operations(registry, provider_factory=None):
+def register_operations(registry, provider_factory=None, instruction_reconcile=None):
     from contextopus.core.operations import OperationSpec
 
     def handler(name):
@@ -194,6 +199,7 @@ def register_operations(registry, provider_factory=None):
                 name,
                 arguments,
                 **({"provider_factory": provider_factory} if provider_factory else {}),
+                instruction_reconcile=instruction_reconcile,
             )
 
         return call

@@ -21,6 +21,7 @@ def workspace(tmp_path):
 
 def save(call, cycle, text, **extra):
     proposal = call("proposal_prepare", cycle_id=cycle,
+                    expected_task_revision=call("status", cycle_id=cycle)["task_revision"],
                     changes=[{"description": "Verified behavior used to test historical replay and policy evidence", "key": "one", "content": text, **extra}])
     call("proposal_apply", cycle_id=cycle, proposal_id=proposal["proposal_id"], expected_revision=proposal["revision"])
     return proposal["created_ids"]["one"]
@@ -74,7 +75,7 @@ def test_cross_context_read_keeps_owner_and_active_rules(workspace):
     other = CycleRuntime(runtime.engine.work_root, "other", provider_factory=Factory())
     create(other)
     cycle = other.startup("other-cycle")["cycle_id"]
-    proposal = other.proposal_prepare(cycle, [{"description": "Verified behavior used to test historical replay and policy evidence", "key": "other", "content": "# Other context\nForeign fact."}])
+    proposal = other.proposal_prepare(cycle, [{"description": "Verified behavior used to test historical replay and policy evidence", "key": "other", "content": "# Other context\nForeign fact."}], expected_task_revision=other.status(cycle)["task_revision"])
     other.proposal_apply(cycle, proposal["proposal_id"], proposal["revision"])
     read = call("read", material_id=proposal["created_ids"]["other"])
     event = runtime.analytics_read(read["analytics"]["event_id"])

@@ -98,7 +98,7 @@ def test_unicode_neighbors_and_managed_update_ignore_implicit_locale(base, monke
         cycle = neighbor.startup('neighbor-records')['cycle_id']
         bodies = {'target': lines('# Цель Н 🙂\nТочные условия применения.\n'),
                   'source': lines('# Источник Н\nПроверить связанную цель.\n')}
-        proposal = neighbor.proposal_prepare(cycle, [
+        proposal = neighbor.proposal_prepare(cycle, expected_task_revision=neighbor.status(cycle)['task_revision'], changes=[
             {'key': key, 'content': body, 'description': 'Содержит проверенные условия Н и границы применения.',
              'path': 'Знания/' + ('Цель Н.md' if key == 'target' else 'Источник Н.md'),
              'links': [] if key == 'target' else ['@target']}
@@ -347,12 +347,12 @@ def test_managed_update_preserves_user_added_links(base):
     runtime = base.runtime_factory(base.layout.root, state['context'])
     try:
         cycle = runtime.startup('custom-links')['cycle_id']
-        created = runtime.proposal_prepare(cycle, [{'key': 'custom', 'content': '# User reference\nAdditional context', 'description': 'Explains the user reference conditions needed by the product guide.'}])
+        created = runtime.proposal_prepare(cycle, [{'key': 'custom', 'content': '# User reference\nAdditional context', 'description': 'Explains the user reference conditions needed by the product guide.'}], expected_task_revision=runtime.status(cycle)['task_revision'])
         runtime.proposal_apply(cycle, created['proposal_id'], created['revision'])
         user_id = created['created_ids']['custom']
         guide_id = state['managed']['documents']['guide']['id']
         guide = runtime.read(material_id=guide_id)
-        changed = runtime.proposal_prepare(cycle, [{'material_id': guide_id, 'expected_revision': guide['revision'], 'links': [*guide['links'], user_id]}])
+        changed = runtime.proposal_prepare(cycle, [{'material_id': guide_id, 'expected_revision': guide['revision'], 'links': [*guide['links'], user_id]}], expected_task_revision=runtime.status(cycle)['task_revision'])
         runtime.proposal_apply(cycle, changed['proposal_id'], changed['revision'])
         runtime.finish(cycle)
     finally:

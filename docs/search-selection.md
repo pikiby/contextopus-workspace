@@ -101,48 +101,48 @@ Preview revisions include the available algorithm descriptions. If a provider is
 
 ## MCP examples
 
-Use `read` for queries and `write` for changes; `guide(operation=...)` gives an unknown signature. Replace the root/context values with the selected coordinates.
+Use `read` for queries and `write` for changes; `guide(operation=...)` gives an unknown signature. Select a context by name; the MCP server owns its storage location.
 
 Inspect an exact algorithm without loading embeddings:
 
 ```json
-{"operation":"core.algorithms","arguments":{"query":"archivist"},"work_root":"/path/to/root"}
+{"operation":"core.algorithms","arguments":{"query":"archivist"}}
 ```
 
 Search one Workspace context with a request-only selection override:
 
 ```json
-{"operation":"workspace.search","arguments":{"query":"release conditions","selection":{"algorithm":"nearest_n","parameters":{"N":5}}},"work_root":"/path/to/root","context":"project-a"}
+{"operation":"workspace.search","arguments":{"query":"release conditions","selection":{"algorithm":"nearest_n","parameters":{"N":5}}},"context":"project-a"}
 ```
 
 Inspect a page of fragments across explicitly chosen contexts:
 
 ```json
-{"operation":"workspace.search","arguments":{"query":"release conditions","categories":["project-a","project-b"],"output":"fragments","selection":{"algorithm":"none","parameters":{"offset":20,"page_size":20}}},"work_root":"/path/to/root","context":"project-a"}
+{"operation":"workspace.search","arguments":{"query":"release conditions","categories":["project-a","project-b"],"output":"fragments","selection":{"algorithm":"none","parameters":{"offset":20,"page_size":20}}},"context":"project-a"}
 ```
 
 Search another module's collection through Core:
 
 ```json
-{"operation":"core.search","arguments":{"query":"release conditions","module":"example","collection":"reference","selection":{"algorithm":"archivist","parameters":{"d_max":null,"top_k":5}}},"work_root":"/path/to/root"}
+{"operation":"core.search","arguments":{"query":"release conditions","module":"example","collection":"reference","selection":{"algorithm":"archivist","parameters":{"d_max":null,"top_k":5}}}}
 ```
 
 Preview a persistent context setting, then pass the returned revision to the execute tool:
 
 ```json
-{"operation":"core.settings_preview","arguments":{"module":"workspace","context":"project-a","changes":{"selection":{"algorithm":"distance_threshold","parameters":{"N":40,"d_max":0.6}}}},"work_root":"/path/to/root"}
+{"operation":"core.settings_preview","arguments":{"module":"workspace","context":"project-a","changes":{"selection":{"algorithm":"distance_threshold","parameters":{"N":40,"d_max":0.6}}}}}
 ```
 
 ```json
-{"operation":"core.settings_apply","arguments":{"preview_revision":"<returned-preview-revision>"},"work_root":"/path/to/root"}
+{"operation":"core.settings_apply","arguments":{"preview_revision":"<returned-preview-revision>"}}
 ```
 
 Refresh the semantic catalog with the execute tool, then search it with the query tool:
 
 ```json
-{"operation":"core.algorithms_refresh","arguments":{},"work_root":"/path/to/root"}
+{"operation":"core.algorithms_refresh","arguments":{}}
 ```
 
 ```json
-{"operation":"core.algorithms","arguments":{"query":"retain a close cluster and cut a weak tail","semantic":true,"limit":3},"work_root":"/path/to/root"}
+{"operation":"core.algorithms","arguments":{"query":"retain a close cluster and cut a weak tail","semantic":true,"limit":3}}
 ```

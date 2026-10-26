@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "contextopus-workspace"
-version = "1.7.0"
+version = "1.8.0"
 description = "Optional Contextopus module for persistent project contexts and evidence-backed memory"
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
 requires-python = ">=3.12"
-dependencies = ["contextopus-core>=1.7,<2"]
+dependencies = ["contextopus-core>=1.8,<2"]
 
 [project.optional-dependencies]
 test = ["pytest>=8", "pytest-asyncio>=0.24"]

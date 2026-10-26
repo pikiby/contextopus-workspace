@@ -18,10 +18,10 @@ procedure for finding evidence, reviewing changes and continuing unfinished work
 
 ## Install
 
-**Workspace 1.7.0 requires Core >=1.7,<2 and Python 3.12+.** Install Core first
+**Workspace 1.8.0 requires Core >=1.8,<2 and Python 3.12+.** Install Core first
 and start its service. The selected root must match that running Core owner.
 Download and extract the [latest module ZIP](https://github.com/pikiby/contextopus-workspace/releases/latest/download/contextopus-workspace.zip)
-or the [exact 1.7.0 ZIP](https://github.com/pikiby/contextopus-workspace/releases/download/v1.7.0/contextopus-workspace-1.7.0.zip).
+or the [exact 1.8.0 ZIP](https://github.com/pikiby/contextopus-workspace/releases/download/v1.8.0/contextopus-workspace-1.8.0.zip).
 Release availability is listed on the [releases page](https://github.com/pikiby/contextopus-workspace/releases).
 If the asset is not available yet, [build it from this checkout](docs/install.md#build-from-source).
 
@@ -121,4 +121,4 @@ for package formats, setup and verification limits.
 
 ## Current release
 
-[1.7.0: Shared instructions and project documents](https://github.com/pikiby/contextopus-workspace/releases/tag/v1.7.0) · [Downloads](https://github.com/pikiby/contextopus-workspace/releases/tag/v1.7.0)
+[1.8.0: Assignment revisions and repeatable reviews](docs/releases/1.8.0.md) · [Downloads](https://github.com/pikiby/contextopus-workspace/releases/tag/v1.8.0)

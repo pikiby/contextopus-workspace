@@ -29,9 +29,10 @@ def test_workspace_and_ordinary_module_preserve_separate_state_on_restart(tmp_pa
             })
             assert created['status'] == 'created'
             assert not (root / '.pcw').exists()
-            cycle = app.execute('workspace.startup', {
-                'request_id': 'save-linked-facts', 'user_request': 'Preserve two linked facts.'})['cycle_id']
-            proposal = app.execute('workspace.proposal_prepare', {'cycle_id': cycle, 'changes': [
+            opened = app.execute('workspace.startup', {
+                'request_id': 'save-linked-facts', 'user_request': 'Preserve two linked facts.'})
+            cycle = opened['cycle_id']
+            proposal = app.execute('workspace.proposal_prepare', {'cycle_id': cycle, 'expected_task_revision': opened['task_revision'], 'changes': [
                 {'key': 'first', 'content': '# First fact\nStable module identity.',
                  'description': 'Defines stable identity during module updates.', 'links': ['@second']},
                 {'key': 'second', 'content': '# Second fact\nDurable module data.',

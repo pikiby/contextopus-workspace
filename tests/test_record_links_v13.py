@@ -37,7 +37,7 @@ def put(runtime, body, links=None, path=None):
     change = {"key": "new", "content": body, "description": "Explains verified conditions and when to apply them.", "links": links or []}
     if path is not None:
         change["path"] = path
-    plan = runtime.proposal_prepare(ident, [change])
+    plan = runtime.proposal_prepare(ident, [change], expected_task_revision=runtime.status(ident)['task_revision'])
     assert runtime.proposal_apply(ident, plan["proposal_id"], plan["revision"])["status"] == "applied"
     return runtime.read(material_id=plan["created_ids"]["new"])
 
@@ -70,7 +70,7 @@ def test_rename_reviews_incoming_paths_preserves_graph_and_vectors(tmp_path):
     source = put(runtime, "# Source\nUse these conditions.", [target["id"]])
     calls = len(factory.calls)
     ident = cycle(runtime)
-    plan = runtime.proposal_prepare(ident, [{"material_id": target["id"], "expected_revision": target["revision"], "path": "Раздел/Новое имя.md"}])
+    plan = runtime.proposal_prepare(ident, [{"material_id": target["id"], "expected_revision": target["revision"], "path": "Раздел/Новое имя.md"}], expected_task_revision=runtime.status(ident)['task_revision'])
     review = {r["id"]: r for r in plan["review_changes"]}
     assert set(review) == {target["id"], source["id"]}
     assert review[source["id"]]["navigation_changes"]["before"] != review[source["id"]]["navigation_changes"]["after"]
@@ -89,13 +89,13 @@ def test_foreign_rename_and_concurrent_incoming_do_not_modify_files(tmp_path):
     target = put(a, "# Target\nConditions.")
     ident = cycle(a)
     change = {"material_id": target["id"], "expected_revision": target["revision"], "path": "New.md"}
-    plan = a.proposal_prepare(ident, [change])
+    plan = a.proposal_prepare(ident, [change], expected_task_revision=a.status(ident)['task_revision'])
     incoming = put(b, "# Foreign\nUses target.", [target["id"]])
     before = (a.engine.root / target["path"]).read_bytes()
     with pytest.raises(PCWError, match="context beta"):
         a.proposal_apply(ident, plan["proposal_id"], plan["revision"])
     with pytest.raises(PCWError, match="context beta"):
-        a.proposal_prepare(ident, [change])
+        a.proposal_prepare(ident, [change], expected_task_revision=a.status(ident)['task_revision'])
     assert (a.engine.root / target["path"]).read_bytes() == before
     assert b.engine.resolve(incoming["id"]).links == [target["id"]]
     a.close(); b.close()
@@ -105,7 +105,7 @@ def test_local_incoming_added_after_rename_review_requires_reprepare(tmp_path):
     runtime = context(tmp_path)
     target = put(runtime, "# Target\nConditions.")
     ident = cycle(runtime)
-    plan = runtime.proposal_prepare(ident, [{"material_id": target["id"], "expected_revision": target["revision"], "path": "New.md"}])
+    plan = runtime.proposal_prepare(ident, [{"material_id": target["id"], "expected_revision": target["revision"], "path": "New.md"}], expected_task_revision=runtime.status(ident)['task_revision'])
     source = put(runtime, "# New source\nUses target.", [target["id"]])
     with pytest.raises(PCWError, match="new incoming"):
         runtime.proposal_apply(ident, plan["proposal_id"], plan["revision"])
@@ -121,7 +121,7 @@ def test_descriptions_are_authored_legacy_gaps_remain_readable_and_repairable(tm
         if description is not None:
             change["description"] = description
         with pytest.raises(PCWError, match="description"):
-            runtime.proposal_prepare(ident, [change])
+            runtime.proposal_prepare(ident, [change], expected_task_revision=runtime.status(ident)['task_revision'])
     item = put(runtime, "# Legacy\nVerified conditions.")
     path = runtime.engine.root / item["path"]
     metadata, body = _parse(path.read_text(encoding="utf-8"))
@@ -134,12 +134,12 @@ def test_descriptions_are_authored_legacy_gaps_remain_readable_and_repairable(tm
     gaps = [row for row in runtime.audit()["materials"] if row["material_id"] == item["id"]]
     assert any(issue["problem"] == "missing_description" for issue in gaps[0]["issues"])
     unchanged = {"material_id": item["id"], "expected_revision": legacy["revision"], "content": body, "status": "verified"}
-    plan = runtime.proposal_prepare(ident, [unchanged])
+    plan = runtime.proposal_prepare(ident, [unchanged], expected_task_revision=runtime.status(ident)['task_revision'])
     assert runtime.proposal_apply(ident, plan["proposal_id"], plan["revision"])["status"] == "applied"
     current = runtime.read(material_id=item["id"])
     with pytest.raises(PCWError, match="description"):
-        runtime.proposal_prepare(ident, [{"material_id": item["id"], "expected_revision": current["revision"], "content": body + "Updated condition."}])
-    plan = runtime.proposal_prepare(ident, [{"material_id": item["id"], "expected_revision": current["revision"], "description": "Explains verified conditions and their limits."}])
+        runtime.proposal_prepare(ident, [{"material_id": item["id"], "expected_revision": current["revision"], "content": body + "Updated condition."}], expected_task_revision=runtime.status(ident)['task_revision'])
+    plan = runtime.proposal_prepare(ident, [{"material_id": item["id"], "expected_revision": current["revision"], "description": "Explains verified conditions and their limits."}], expected_task_revision=runtime.status(ident)['task_revision'])
     runtime.proposal_apply(ident, plan["proposal_id"], plan["revision"])
     assert not any(issue["problem"] == "missing_description" for row in runtime.audit()["materials"] if row["material_id"] == item["id"] for issue in row["issues"])
     runtime.close()
@@ -165,7 +165,7 @@ def test_oversized_legacy_body_metadata_edits_preserve_text_and_vectors(tmp_path
         }
         calls = len(factory.calls)
         ident = cycle(runtime)
-        plan = runtime.proposal_prepare(ident, [{"material_id": item["id"], "expected_revision": item["revision"], **edits[edit]}])
+        plan = runtime.proposal_prepare(ident, [{"material_id": item["id"], "expected_revision": item["revision"], **edits[edit]}], expected_task_revision=runtime.status(ident)['task_revision'])
         assert plan.get("status") != "needs_split"
         assert runtime.proposal_apply(ident, plan["proposal_id"], plan["revision"])["status"] == "applied"
         current = runtime.read(material_id=item["id"])
@@ -180,7 +180,7 @@ def test_oversized_legacy_body_metadata_edits_preserve_text_and_vectors(tmp_path
             {"material_id": item["id"], "expected_revision": current["revision"], "content": body + "New condition.\n", "description": "Reviews the historical task with an additional condition."},
             {"key": "new", "content": body, "description": "Records a new independent task and its conditions."},
         ]:
-            rejected = runtime.proposal_prepare(ident, [change])
+            rejected = runtime.proposal_prepare(ident, [change], expected_task_revision=runtime.status(ident)['task_revision'])
             assert rejected["status"] == "needs_split"
             assert rejected["knowledge_changed"] is False
             assert rejected["materials"][0]["tokens"] > rejected["materials"][0]["limit"] == 1024
@@ -265,7 +265,7 @@ def test_delete_redirects_native_incoming_paths_without_changing_surviving_ids(t
     survivor = put(runtime, "# Survivor\nComplete conditions.")
     source = put(runtime, "# Source\nUses conditions.", [old["id"]])
     ident = cycle(runtime)
-    plan = runtime.proposal_prepare(ident, [{"material_id": old["id"], "expected_revision": old["revision"], "delete": True}], replacements={old["id"]: survivor["id"]})
+    plan = runtime.proposal_prepare(ident, [{"material_id": old["id"], "expected_revision": old["revision"], "delete": True}], replacements={old["id"]: survivor["id"]}, expected_task_revision=runtime.status(ident)['task_revision'])
     runtime.proposal_apply(ident, plan["proposal_id"], plan["revision"])
     assert old["id"] not in runtime.engine.catalog
     assert runtime.engine.resolve(source["id"]).links == [survivor["id"]]
@@ -279,7 +279,7 @@ def test_rename_conflict_keeps_concurrent_source_write(tmp_path):
     target = put(runtime, "# Target\nConditions.")
     source = put(runtime, "# Source\nUses conditions.", [target["id"]])
     ident = cycle(runtime)
-    plan = runtime.proposal_prepare(ident, [{"material_id": target["id"], "expected_revision": target["revision"], "path": "New.md"}])
+    plan = runtime.proposal_prepare(ident, [{"material_id": target["id"], "expected_revision": target["revision"], "path": "New.md"}], expected_task_revision=runtime.status(ident)['task_revision'])
     path = runtime.engine.root / source["path"]
     concurrent = path.read_text(encoding="utf-8") + "\nConcurrent observation.\n"
     path.write_text(concurrent, encoding="utf-8", newline="")
@@ -298,11 +298,11 @@ def test_pending_new_source_conflicts_before_write_if_target_moves(tmp_path, tar
     pending = runtime.proposal_prepare(ident, [{
         'key': 'new', 'content': '# New source\nUses existing conditions.',
         'description': 'Explains when the existing conditions apply.', 'links': [target['id']],
-    }])
+    }], expected_task_revision=runtime.status(ident)['task_revision'])
     rename_cycle = cycle(runtime)
     change = {'material_id': target['id'], 'expected_revision': target['revision']}
     change.update({'path': 'Moved target.md'} if target_action == 'rename' else {'delete': True})
-    moved = runtime.proposal_prepare(rename_cycle, [change])
+    moved = runtime.proposal_prepare(rename_cycle, [change], expected_task_revision=runtime.status(rename_cycle)['task_revision'])
     runtime.proposal_apply(rename_cycle, moved['proposal_id'], moved['revision'])
     # The original review retains its stable target identity and remains readable.
     reviewed = runtime.proposal_read(ident, pending['proposal_id'])
@@ -359,11 +359,29 @@ def test_format_three_pending_id_graph_rename_and_new_card_survive_migration(tmp
     assert proposal_path.read_bytes() == original
     assert runtime.engine.resolve(source["id"]).links == [target["id"]]
     result = runtime.proposal_apply(ident, proposal["proposal_id"], proposal["revision"])
+    assert result["status"] == "reprepare_required", result
+    assert result["knowledge_changed"] is False
+    assert proposal_path.read_bytes() == original
+    assert runtime.engine.resolve(target["id"]).path == target["path"]
+    assert new_id not in runtime.engine.catalog
+    # A legacy review has no observed task revision. Preserve it through the
+    # format migration, then explicitly review its intended changes again.
+    current = runtime.read(material_id=target["id"])
+    proposal = runtime.proposal_prepare(ident, [
+        {"material_id": target["id"], "expected_revision": current["revision"],
+         "path": "Explicit pending rename.md"},
+        {"key": "new", "path": "New pending.md", "content": "# New pending\nUses both conditions.",
+         "description": "Explains a pending route through two existing conditions.",
+         "links": [source["id"], target["id"]]},
+    ], proposal_id=proposal["proposal_id"], expected_task_revision=result["task_revision"])
+    new_id = proposal["created_ids"]["new"]
+    revised = proposal_path.read_bytes()
+    result = runtime.proposal_apply(ident, proposal["proposal_id"], proposal["revision"])
     assert result["status"] == "applied", result
     assert runtime.engine.resolve(target["id"]).path == "knowledge/Explicit pending rename.md"
     assert runtime.engine.resolve(source["id"]).links == [target["id"]]
     assert runtime.engine.resolve(new_id).links == [source["id"], target["id"]]
-    assert proposal_path.read_bytes() == original
+    assert proposal_path.read_bytes() == revised
     assert runtime.upgrade_plan()["compatible"]
     runtime.close()
 
@@ -415,9 +433,9 @@ def test_mcp_upgrade_copy_uses_own_vault_boundary_inside_another_vault(tmp_path,
             super().__init__(selected_root)
             owners.append(self)
 
-        def application(self, selected_root=None, context=None):
-            assert Path(selected_root or self.root).resolve() == root
-            return super().application(selected_root, context)
+        def application(self, context=None):
+            assert Path(self.root).resolve() == root
+            return super().application(context)
 
     monkeypatch.setattr(server, "ProcessResources", lambda: resources)
     monkeypatch.setattr(server, "ServerOwner", CopyOwner)
@@ -430,7 +448,7 @@ def test_mcp_upgrade_copy_uses_own_vault_boundary_inside_another_vault(tmp_path,
             assert {tool.name for tool in (await client.list_tools()).tools} == {"guide", "read", "write", "finish"}
 
             async def call(name, **arguments):
-                result = await client.call_tool(name, {"work_root": str(root), "context": "alpha", **arguments})
+                result = await client.call_tool(name, {"context": "alpha", **arguments})
                 assert not result.isError, result
                 return result.structuredContent if result.structuredContent is not None else json.loads(
                     "".join(block.text for block in result.content if hasattr(block, "text")))

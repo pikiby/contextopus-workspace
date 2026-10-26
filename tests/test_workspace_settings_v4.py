@@ -283,7 +283,7 @@ def test_changed_settings_invalidate_prepared_proposal_without_changing_rules(tm
     runtime = context(tmp_path)
     try:
         cycle = runtime.startup("work")["cycle_id"]
-        proposal = runtime.proposal_prepare(cycle, [{"key": "fact", "content": "# Fact\nVerified behavior.",
+        proposal = runtime.proposal_prepare(cycle, expected_task_revision=runtime.status(cycle)["task_revision"], changes=[{"key": "fact", "content": "# Fact\nVerified behavior.",
                                                      "description": "Behavior checked during this test"}])
         rules = runtime.instructions_read()
         p = runtime.settings_preview({"knowledge_approval_required": True}, "Require approval for future changes")
@@ -392,7 +392,7 @@ def test_quiescent_root_snapshot_restores_data_configuration_git_sqlite_and_rag(
     layout = runtime.control.layout
     cycle = runtime.startup("unfinished-before-snapshot")["cycle_id"]
     temporary = runtime.tmp_write(cycle, "Keep this unfinished investigation")
-    proposal = runtime.proposal_prepare(cycle, [{"key": "pending", "content": f"# Pending факт Н{newline}Checked conditions.",
+    proposal = runtime.proposal_prepare(cycle, expected_task_revision=runtime.status(cycle)["task_revision"], changes=[{"key": "pending", "content": f"# Pending факт Н{newline}Checked conditions.",
                                                 "description": "Verified conditions awaiting application"}])
     old_rules = legacy_instructions(allow_implicit_updates=True, material_max_tokens=None).replace("\r\n", newline)
     downgrade(runtime, old_rules)

@@ -131,10 +131,44 @@ available for the next stage. Unverified or working-only findings may remain in
 optional `.tmp`, and a no-change comparison needs no invented report or proposal.
 
 Questions and clarifications steer the current work. Repeating `w` does not
-create another cycle. A pause or handoff retains unfinished work. Once the bounded
+create another cycle. Each relevant clarification is recorded verbatim with a
+stable request ID. Repeating that ID and text is idempotent; different text under
+the same ID is a conflict. Startup, status and clarification receipts include
+`task_revision`. Preparation requires `expected_task_revision` from the assignment
+used to compose the draft. A later clarification blocks an unstarted proposal
+with `task_changed`; old proposals without this receipt return `reprepare_required`.
+The agent reconsiders the text and prepares the same proposal again. Already
+started writes retain their existing before/after recovery checks, and an applied
+retry returns its receipt. A revision does not prove that the agent understood
+the request or recorded all messages.
+
+A pause or handoff retains unfinished work. Once the bounded
 task is resolved, recheck the remaining conclusions against permanent knowledge,
 resolve pending changes and use the dedicated `finish` tool with the current
 cleanup revision and policy.
+
+## Review an entire context
+
+`workspace.audit(scope="all", request_id="review-1", limit=50)` captures an
+ordered inventory of Context.md and knowledge files. `workspace.list` supports
+the same arguments. Continue with the returned cursor; retries do not skip or
+double-count entries. Read bodies with `workspace.read_many(material_ids=[...],
+scope_id=...)`. Bodies are current source text; mismatches with the snapshot and
+missing/invalid files are reported instead of manufacturing older text.
+
+Counters distinguish catalog entries delivered from matching full bodies
+delivered. Neither means analyzed. An explicit `delta_refresh=true` with scope_id
+captures added/changed/deleted entries separately; delta_cursor pages that frozen
+change set without altering the original total. Inactive inventory caches expire
+after 30 days; a fresh request ID starts a new review. Expiry never removes cards
+or cycles. Ready accepted results can be saved while the broader review continues.
+
+Complete record reads also return bounded `relation_candidates`: incoming and
+outgoing direct neighbors with their descriptions, paths and revisions. Additional
+pages use relation_offset/relation_limit. The agent chooses relevant neighbors;
+ordinary links do not become instructions. Proposal candidates are captured at
+preparation, so their labels are not fresh evidence. Coverage limits remain
+explicit until shared body/cross-module link handling is implemented.
 
 ## Share working material when it helps
 

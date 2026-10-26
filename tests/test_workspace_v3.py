@@ -115,14 +115,14 @@ def test_legacy_migration_preserves_every_source(tmp_path):
 def test_parallel_tasks_revision_conflicts_and_tmp_lifetime(workspace):
     a = workspace.startup("task-a")["cycle_id"]
     b = workspace.startup("task-b")["cycle_id"]
-    p = workspace.proposal_prepare(a, [{"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "key": "task", "type": "task", "content": "# First task", "status": "active"}])
+    p = workspace.proposal_prepare(a, [{"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "key": "task", "type": "task", "content": "# First task", "status": "active"}], expected_task_revision=workspace.status(a)["task_revision"])
     workspace.proposal_apply(a, p["proposal_id"], p["revision"])
     first = workspace.read(material_id=p["created_ids"]["task"])
     change = {"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "material_id": first["id"], "expected_revision": first["revision"], "content": "# First task\nChecked source"}
-    updated = workspace.proposal_prepare(a, [change])
+    updated = workspace.proposal_prepare(a, [change], expected_task_revision=workspace.status(a)["task_revision"])
     workspace.proposal_apply(a, updated["proposal_id"], updated["revision"])
     with pytest.raises(PCWError, match="changed"):
-        workspace.proposal_prepare(b, [change])
+        workspace.proposal_prepare(b, [change], expected_task_revision=workspace.status(b)["task_revision"])
     workspace.tmp_write(b, "ongoing")
     assert finish_with_cleanup_approval(workspace, a)["status"] == "closed"
     assert "Checked source" in workspace.read(material_id=first["id"])["content"]
@@ -139,7 +139,7 @@ def test_independent_permission_settings(tmp_path, implicit, approval):
         with pytest.raises(PCWError, match="explicit"):
             runtime.startup("implicit", invocation="implicit")
     cycle = runtime.startup("work", invocation="implicit" if implicit else "explicit")["cycle_id"]
-    plan = runtime.proposal_prepare(cycle, [{"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "key": "fact", "content": "Verified fact"}])
+    plan = runtime.proposal_prepare(cycle, [{"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "key": "fact", "content": "Verified fact"}], expected_task_revision=runtime.status(cycle)["task_revision"])
     assert plan["approval_required"] is approval
     if approval:
         with pytest.raises(PCWError, match="confirmation"):
@@ -151,14 +151,14 @@ def test_project_review_and_audit_cannot_write(workspace):
     cycle = workspace.startup("project-work")["cycle_id"]
     before = workspace.project_read()
     change = {"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "material_id": before["id"], "expected_revision": before["revision"], "content": "# Project\nUser's accepted scope.\n"}
-    plan = workspace.proposal_prepare(cycle, [change])
+    plan = workspace.proposal_prepare(cycle, [change], expected_task_revision=workspace.status(cycle)["task_revision"])
     assert workspace.project_read() == before
     workspace.proposal_apply(cycle, plan["proposal_id"], plan["revision"])
     assert "accepted scope" in workspace.project_read()["content"]
     audit = workspace.startup("audit", purpose="audit")["cycle_id"]
     assert workspace.list(audit)["total"] == 1
     with pytest.raises(PCWError):
-        workspace.proposal_prepare(audit, [{"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "key": "x", "content": "x"}])
+        workspace.proposal_prepare(audit, [{"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "key": "x", "content": "x"}], expected_task_revision=workspace.status(audit)["task_revision"])
     assert workspace.finish(audit)["status"] == "closed"
 
 
@@ -172,10 +172,10 @@ def test_creation_material_limit_default_and_explicit_overrides(tmp_path, overri
         cycle = runtime.startup("work")["cycle_id"]
         # This fixture tokenizer counts characters, making the exact boundary deterministic.
         length = limit if limit is not None else 4096
-        accepted = runtime.proposal_prepare(cycle, [{"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "key": "topic", "content": "x" * length}])
+        accepted = runtime.proposal_prepare(cycle, [{"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "key": "topic", "content": "x" * length}], expected_task_revision=runtime.status(cycle)["task_revision"])
         assert accepted["status"] == "prepared"
         if limit is not None:
-            rejected = runtime.proposal_prepare(cycle, [{"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "key": "large", "content": "x" * (limit + 1)}])
+            rejected = runtime.proposal_prepare(cycle, [{"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "key": "large", "content": "x" * (limit + 1)}], expected_task_revision=runtime.status(cycle)["task_revision"])
             assert rejected["status"] == "needs_split"
             assert rejected["materials"][0]["tokens"] == limit + 1
         assert runtime.list()["total"] == 1
@@ -189,12 +189,12 @@ def test_optional_limit_rejects_before_write_and_labels_need_no_embedding(tmp_pa
     runtime = CycleRuntime(tmp_path, "limited", provider_factory=factory)
     create(runtime, material_max_tokens=30)
     cycle = runtime.startup("work")["cycle_id"]
-    oversized = runtime.proposal_prepare(cycle, [{"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "key": "large", "content": "x" * 31}])
+    oversized = runtime.proposal_prepare(cycle, [{"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "key": "large", "content": "x" * 31}], expected_task_revision=runtime.status(cycle)["task_revision"])
     assert oversized["status"] == "needs_split"
     assert oversized["materials"][0]["tokens"] == 31
     assert runtime.list()["total"] == 1
     assert len(factory.calls) == 1  # Only initial project indexing.
-    plan = runtime.proposal_prepare(cycle, [
+    plan = runtime.proposal_prepare(cycle, expected_task_revision=runtime.status(cycle)["task_revision"], changes=[
         {"key": "a", "content": "# Storage\nFacts", "description": "Storage mechanism", "links": ["@b"]},
         {"key": "b", "content": "# Recovery\nSteps", "description": "Recovering storage"}])
     runtime.proposal_apply(cycle, plan["proposal_id"], plan["revision"])
@@ -204,7 +204,7 @@ def test_optional_limit_rejects_before_write_and_labels_need_no_embedding(tmp_pa
     with pytest.raises(PCWError, match="existing link"):
         runtime.read(material_id=a["id"], from_id=b["id"])
     calls = len(factory.calls)
-    change = runtime.proposal_prepare(cycle, [{"material_id": b["id"], "expected_revision": b["revision"], "description": "Recovery conditions"}])
+    change = runtime.proposal_prepare(cycle, [{"material_id": b["id"], "expected_revision": b["revision"], "description": "Recovery conditions"}], expected_task_revision=runtime.status(cycle)["task_revision"])
     assert change["review_changes"][0]["description_change"]["after"] == "Recovery conditions"
     runtime.proposal_apply(cycle, change["proposal_id"], change["revision"])
     assert len(factory.calls) == calls
@@ -214,7 +214,7 @@ def test_optional_limit_rejects_before_write_and_labels_need_no_embedding(tmp_pa
 def test_cold_process_can_read_proposal_link_labels(workspace):
     cycle = workspace.startup("work")["cycle_id"]
     first = workspace.engine.create("# Existing topic\nContent", description="An existing target for cold-process link labels")
-    plan = workspace.proposal_prepare(cycle, [{"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "key": "new", "content": "New facts", "links": [first["id"]]}])
+    plan = workspace.proposal_prepare(cycle, [{"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "key": "new", "content": "New facts", "links": [first["id"]]}], expected_task_revision=workspace.status(cycle)["task_revision"])
     cold = CycleRuntime(workspace.engine.work_root, "project", provider_factory=Factory())
     assert cold.proposal_read(cycle, plan["proposal_id"])["review_changes"][0]["links_added"][0]["title"] == "Existing topic"
     cold.close()
@@ -252,10 +252,10 @@ def legacy_with_work(tmp_path):
     legacy_rules = "---\n" + yaml.safe_dump(runtime._policies(), sort_keys=False) + "---\n" + runtime.instructions_read()["content"]
     pending = runtime.startup("consolidate-runbooks")["cycle_id"]
     runtime.tmp_write(pending, "# Contract procedures\nVerified source findings.")
-    proposal = runtime.proposal_prepare(pending, [{"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "key": "new", "content": "# Contract setup\nExact procedure."}])
+    proposal = runtime.proposal_prepare(pending, [{"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "key": "new", "content": "# Contract setup\nExact procedure."}], expected_task_revision=runtime.status(pending)["task_revision"])
     saved = runtime.startup("retention-rules")["cycle_id"]
     runtime.tmp_write(saved, "# Storage retention\nVerified retention rules.")
-    applied = runtime.proposal_prepare(saved, [{"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "key": "saved", "content": "# Retention\nSaved rules."}])
+    applied = runtime.proposal_prepare(saved, [{"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "key": "saved", "content": "# Retention\nSaved rules."}], expected_task_revision=runtime.status(saved)["task_revision"])
     runtime.proposal_apply(saved, applied["proposal_id"], applied["revision"], confirmation="Approve this text")
     # Build a genuine preceding-format fixture: filename identity, old snapshots
     # and a per-context index. Do not disguise format-2 files by removing a marker.
@@ -382,7 +382,7 @@ def test_current_format_reports_project_content_without_rewriting(workspace, con
 
 def test_current_format_reports_damaged_unfinished_work(workspace):
     cycle = workspace.startup("pending-review")["cycle_id"]
-    proposal = workspace.proposal_prepare(cycle, [{"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "key": "new", "content": "# Fact\nChecked."}])
+    proposal = workspace.proposal_prepare(cycle, [{"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "key": "new", "content": "# Fact\nChecked."}], expected_task_revision=workspace.status(cycle)["task_revision"])
     workspace._plan_path(cycle, proposal["proposal_id"]).unlink()
     plan = workspace.upgrade_plan()
     assert plan["compatible"] and plan["changes"] == []
@@ -518,7 +518,7 @@ def test_audit_reports_evidence_and_preserves_all_files(workspace):
 
 def test_rework_split_redirects_links_and_keeps_whole_procedure(workspace):
     first = workspace.startup("initial")["cycle_id"]
-    seed = workspace.proposal_prepare(first, [
+    seed = workspace.proposal_prepare(first, expected_task_revision=workspace.status(first)["task_revision"], changes=[
         {"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "key": "mixed", "content": "# Storage\nConnect with A.\nRecovery requires B."},
         {"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "key": "entry", "content": "# Entry", "links": ["@mixed"]}])
     workspace.proposal_apply(first, seed["proposal_id"], seed["revision"])
@@ -526,7 +526,7 @@ def test_rework_split_redirects_links_and_keeps_whole_procedure(workspace):
     c = workspace.startup("rework", purpose="rework")["cycle_id"]
     old = workspace.read(c, seed["created_ids"]["mixed"])
     workspace.tmp_write(c, "Both facts and their conditions were retained in separate topics")
-    plan = workspace.proposal_prepare(c, [
+    plan = workspace.proposal_prepare(c, expected_task_revision=workspace.status(c)["task_revision"], changes=[
         {"material_id": old["id"], "expected_revision": old["revision"], "delete": True},
         {"key": "connection", "content": "# Connection\nConnect with A.", "description": "Connection procedure", "links": ["@recovery"]},
         {"key": "recovery", "content": "# Recovery\nRecovery requires B.", "description": "Recovery conditions"}],

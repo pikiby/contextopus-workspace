@@ -42,7 +42,7 @@ _runtimes: dict[tuple[str, str], CycleRuntime] = {}
 _cache_lock = threading.Lock()
 
 
-def runtime(work_root: str, workspace: str, provider_factory=None) -> CycleRuntime:
+def runtime(work_root: str, workspace: str, provider_factory=None, instruction_reconcile=None) -> CycleRuntime:
     from .layout import WorkspaceLayout as StorageLayout
 
     key = (str(StorageLayout.resolve(work_root).root), workspace)
@@ -53,6 +53,8 @@ def runtime(work_root: str, workspace: str, provider_factory=None) -> CycleRunti
                 workspace,
                 **({"provider_factory": provider_factory} if provider_factory else {}),
             )
+        if instruction_reconcile is not None:
+            _runtimes[key].instruction_reconcile = instruction_reconcile
         return _runtimes[key]
 
 
@@ -80,12 +82,14 @@ def dispatch(
     method_name: str,
     kwargs: dict,
     provider_factory=None,
+    instruction_reconcile=None,
 ):
     """Automatic observation at the common MCP execution boundary."""
     instance = runtime(
         work_root,
         workspace,
         **({"provider_factory": provider_factory} if provider_factory else {}),
+        instruction_reconcile=instruction_reconcile,
     )
     events = EventStore(instance.engine.work_root)
     with instance.control.guard():

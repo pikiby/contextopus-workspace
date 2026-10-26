@@ -168,7 +168,7 @@ def test_pending_review_applies_original_revision_after_real_migration(tmp_path)
         create(runtime, git_history_enabled=False)
         cycle = runtime.startup('original-user-request')['cycle_id']
         runtime.tmp_write(cycle, '# Working investigation\nKeep unfinished evidence.')
-        proposal = runtime.proposal_prepare(cycle, [{'key': 'fact', 'content': '# Reviewed fact\nVerified evidence.',
+        proposal = runtime.proposal_prepare(cycle, expected_task_revision=runtime.status(cycle)['task_revision'], changes=[{'key': 'fact', 'content': '# Reviewed fact\nVerified evidence.',
             'description': 'Records the reviewed fact from a synthetic migration fixture'}])
         # The source fixture represents a release without edit reservations.
         with runtime._cycle(cycle) as (records, state):

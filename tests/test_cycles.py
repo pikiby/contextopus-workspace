@@ -26,7 +26,8 @@ def start(runtime, request="user-request", **kwargs):
 
 
 def prepare(runtime, cycle, text="Verified fact", **kwargs):
-    return runtime.proposal_prepare(cycle, [{"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "key": "topic", "content": text}], **kwargs)
+    return runtime.proposal_prepare(cycle, [{"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "key": "topic", "content": text}],
+                                    expected_task_revision=runtime.status(cycle)["task_revision"], **kwargs)
 
 
 def apply(runtime, cycle, proposal):
@@ -112,7 +113,7 @@ def test_review_returns_only_changed_passages_with_local_context(workspace):
     material = runtime.read(cycle, seed["created_ids"]["topic"])
     addition = "\n## Local configuration\n\nConfigured only; live state has not been checked.\n"
     proposal = runtime.proposal_prepare(cycle, [{"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "material_id": material["id"],
-        "expected_revision": material["revision"], "content": text + addition}])
+        "expected_revision": material["revision"], "content": text + addition}], expected_task_revision=runtime.status(cycle)["task_revision"])
     change, = proposal["review_changes"]
     passage, = change["body_changes"]
     assert change["title"] == "Service"
@@ -130,14 +131,14 @@ def test_review_names_deleted_moved_and_automatically_redirected_topics(workspac
     seed = runtime.proposal_prepare(cycle, [
         {"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "key": "old", "content": "# Old details\n\nPrevious evidence."},
         {"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "key": "kept", "content": "# Shared topic\n\nVerified evidence."},
-        {"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "key": "nav", "content": "# Navigation", "links": ["@old"]}])
+        {"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "key": "nav", "content": "# Navigation", "links": ["@old"]}], expected_task_revision=runtime.status(cycle)["task_revision"])
     apply(runtime, cycle, seed)
     old, kept, nav = [runtime.read(cycle, seed["created_ids"][key]) for key in ("old", "kept", "nav")]
     proposal = runtime.proposal_prepare(cycle, [
         {"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "material_id": kept["id"], "expected_revision": kept["revision"],
          "content": "# Combined topic\n\nVerified evidence. Previous evidence.", "path": "topics/" + kept["id"]},
         {"material_id": old["id"], "expected_revision": old["revision"], "delete": True}
-    ], replacements={old["id"]: kept["id"]})
+    ], replacements={old["id"]: kept["id"]}, expected_task_revision=runtime.status(cycle)["task_revision"])
     changes = {change["id"]: change for change in proposal["review_changes"]}
     assert changes[old["id"]]["body_changes"][0]["before"] == old["content"]
     assert changes[old["id"]]["body_changes"][0]["after"] == ""
@@ -155,7 +156,7 @@ def test_review_does_not_drop_topics_when_effect_receipt_is_bounded(workspace):
     runtime, _ = workspace
     cycle = start(runtime)
     proposal = runtime.proposal_prepare(cycle, [
-        {"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "key": f"topic-{i}", "content": f"# Topic {i}\n\nFact {i}."} for i in range(51)])
+        {"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "key": f"topic-{i}", "content": f"# Topic {i}\n\nFact {i}."} for i in range(51)], expected_task_revision=runtime.status(cycle)["task_revision"])
     assert len(proposal["effects"]) == 50
     assert len(proposal["review_changes"]) == 51
     assert {change["title"] for change in proposal["review_changes"]} == {f"Topic {i}" for i in range(51)}
@@ -187,7 +188,7 @@ def test_parallel_cycles_are_isolated_and_startup_retries_do_not_purge(workspace
     kept = runtime.tmp_write(a, "A in progress")
     assert runtime.startup("a")["replayed"]
     assert runtime.tmp_read(a, kept["id"])
-    runtime.proposal_prepare(a, [], no_changes_reason="A contains only a temporary working note.")
+    runtime.proposal_prepare(a, [], no_changes_reason="A contains only a temporary working note.", expected_task_revision=runtime.status(a)["task_revision"])
     runtime.finish(a)
     assert runtime.tmp_read(b, item["id"])["content"] == "B in progress"
     assert runtime.finish(a)["replayed"]
@@ -228,7 +229,7 @@ def test_no_changes_and_rejected_changes_close_without_dummy_save(workspace):
     assert runtime.finish(a)["status"] == "closed"
     b = start(runtime, "b")
     assert not runtime._tmp(b).exists()  # Direct work needs no fabricated temporary report or no-change proposal.
-    reviewed = runtime.proposal_prepare(b, [], no_changes_reason="No new results or corrections after comparison.")
+    reviewed = runtime.proposal_prepare(b, [], no_changes_reason="No new results or corrections after comparison.", expected_task_revision=runtime.status(b)["task_revision"])
     assert reviewed["status"] == "no_changes"
     assert reviewed["next_action"] == "report_no_changes"
     assert reviewed["effects"] == reviewed["review_changes"] == []
@@ -257,7 +258,7 @@ def test_temporary_churn_does_not_replace_semantic_review_or_invalidate_proposal
     runtime, _ = workspace
     cycle = start(runtime)
     result = runtime.tmp_write(cycle, "Initial working note")
-    runtime.proposal_prepare(cycle, [], no_changes_reason="The initial note adds no reusable knowledge.")
+    runtime.proposal_prepare(cycle, [], no_changes_reason="The initial note adds no reusable knowledge.", expected_task_revision=runtime.status(cycle)["task_revision"])
     args = {"material_id": result["id"], "expected_revision": result["revision"]} if update else {}
     runtime.tmp_write(cycle, "New verified finding", **args)
     assert runtime._tmp(cycle).exists()
@@ -272,11 +273,11 @@ def test_no_change_review_requires_reason_and_does_not_override_pending_approval
     cycle = start(runtime)
     for reason in (None, "", " "):
         with pytest.raises(PCWError, match="no_changes_reason"):
-            runtime.proposal_prepare(cycle, [], no_changes_reason=reason)
+            runtime.proposal_prepare(cycle, [], no_changes_reason=reason, expected_task_revision=runtime.status(cycle)["task_revision"])
     with pytest.raises(PCWError, match="only valid"):
         prepare(runtime, cycle, no_changes_reason="Conflicting claim")
     proposal = prepare(runtime, cycle)
-    reviewed = runtime.proposal_prepare(cycle, [], no_changes_reason="No additional changes beyond the pending proposal.")
+    reviewed = runtime.proposal_prepare(cycle, [], no_changes_reason="No additional changes beyond the pending proposal.", expected_task_revision=runtime.status(cycle)["task_revision"])
     assert runtime.proposal_read(cycle, reviewed["proposal_id"])["no_changes_reason"] == reviewed["no_changes_reason"]
     with pytest.raises(PCWError, match="Apply only"):
         apply(runtime, cycle, reviewed)
@@ -290,7 +291,7 @@ def test_identical_tmp_updates_do_not_invalidate_review(workspace):
     runtime, _ = workspace
     cycle = start(runtime)
     result = runtime.tmp_write(cycle, "Working note")
-    runtime.proposal_prepare(cycle, [], no_changes_reason="This working note is not reusable project knowledge.")
+    runtime.proposal_prepare(cycle, [], no_changes_reason="This working note is not reusable project knowledge.", expected_task_revision=runtime.status(cycle)["task_revision"])
     runtime.tmp_write(cycle, "Working note", material_id=result["id"], expected_revision=result["revision"])
     assert runtime.finish(cycle)["status"] == "closed"
 
@@ -310,12 +311,12 @@ def test_cross_links_merge_and_split_review_includes_incoming_changes(workspace)
     p = runtime.proposal_prepare(cycle, [
         {"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "key": "a", "content": "A", "links": ["@b"]},
         {"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "key": "b", "content": "B", "links": ["@a"]},
-        {"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "key": "neighbor", "content": "Neighbor", "links": ["@b"]}])
+        {"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "key": "neighbor", "content": "Neighbor", "links": ["@b"]}], expected_task_revision=runtime.status(cycle)["task_revision"])
     apply(runtime, cycle, p)
     a, b, n = [runtime.read(cycle, p["created_ids"][key]) for key in ("a", "b", "neighbor")]
     merge = runtime.proposal_prepare(cycle, [
         {"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "material_id": a["id"], "expected_revision": a["revision"], "content": "A with B"},
-        {"material_id": b["id"], "expected_revision": b["revision"], "delete": True}], {b["id"]: a["id"]})
+        {"material_id": b["id"], "expected_revision": b["revision"], "delete": True}], {b["id"]: a["id"]}, expected_task_revision=runtime.status(cycle)["task_revision"])
     assert n["id"] in {effect["id"] for effect in merge["effects"]}
     assert runtime.read(cycle, n["id"])["links"] == [b["id"]]
     assert apply(runtime, cycle, merge)["status"] == "applied"
@@ -324,7 +325,7 @@ def test_cross_links_merge_and_split_review_includes_incoming_changes(workspace)
     a = runtime.read(cycle, a["id"])
     split = runtime.proposal_prepare(cycle, [
         {"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "material_id": a["id"], "expected_revision": a["revision"], "content": "A", "links": ["@details"]},
-        {"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "key": "details", "content": "Separate details", "links": [a["id"]]}])
+        {"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "key": "details", "content": "Separate details", "links": [a["id"]]}], expected_task_revision=runtime.status(cycle)["task_revision"])
     assert apply(runtime, cycle, split)["status"] == "applied"
 
 
@@ -334,7 +335,7 @@ def test_body_and_link_conflicts_require_new_proposal(workspace):
     original = prepare(runtime, cycle)
     apply(runtime, cycle, original)
     item = runtime.read(cycle, original["created_ids"]["topic"])
-    p = runtime.proposal_prepare(cycle, [{"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "material_id": item["id"], "expected_revision": item["revision"], "content": "New fact"}])
+    p = runtime.proposal_prepare(cycle, [{"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "material_id": item["id"], "expected_revision": item["revision"], "content": "New fact"}], expected_task_revision=runtime.status(cycle)["task_revision"])
     # Competing edits are blocked before preparation. After explicit release,
     # the existing revision conflict still prevents an old proposal overwriting.
     other = start(runtime, "other")
@@ -342,7 +343,7 @@ def test_body_and_link_conflicts_require_new_proposal(workspace):
         runtime.reserve(other, [item["id"]], "Concurrent edit")
     for lease in {row["reservation_id"] for row in p["reservations"]}:
         runtime.reservation_release(cycle, lease)
-    q = runtime.proposal_prepare(other, [{"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "material_id": item["id"], "expected_revision": item["revision"], "content": "Concurrent fact"}])
+    q = runtime.proposal_prepare(other, [{"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "material_id": item["id"], "expected_revision": item["revision"], "content": "Concurrent fact"}], expected_task_revision=runtime.status(other)["task_revision"])
     apply(runtime, other, q)
     with pytest.raises(PCWError, match="conflict"):
         apply(runtime, cycle, p)
@@ -352,12 +353,12 @@ def test_body_and_link_conflicts_require_new_proposal(workspace):
 def test_unchanged_body_and_links_only_do_not_embed_again(workspace):
     runtime, factory = workspace
     cycle = start(runtime)
-    p = runtime.proposal_prepare(cycle, [{"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "key": "a", "content": "A"}, {"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "key": "b", "content": "B"}])
+    p = runtime.proposal_prepare(cycle, [{"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "key": "a", "content": "A"}, {"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "key": "b", "content": "B"}], expected_task_revision=runtime.status(cycle)["task_revision"])
     apply(runtime, cycle, p)
     a = runtime.read(cycle, p["created_ids"]["a"])
     before = len(factory.calls)
     q = runtime.proposal_prepare(cycle, [{"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "material_id": a["id"], "expected_revision": a["revision"],
-                                        "content": "A", "links": [p["created_ids"]["b"]]}])
+                                        "content": "A", "links": [p["created_ids"]["b"]]}], expected_task_revision=runtime.status(cycle)["task_revision"])
     apply(runtime, cycle, q)
     assert len(factory.calls) == before
     assert apply(runtime, cycle, q)["replayed"]
@@ -399,7 +400,7 @@ def test_partial_write_retry_and_move(workspace):
     assert apply(runtime, cycle, proposal)["status"] == "applied"
     item = runtime.read(cycle, proposal["created_ids"]["topic"])
     move = runtime.proposal_prepare(cycle, [{"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "material_id": item["id"], "expected_revision": item["revision"],
-                                          "path": "topics/" + item["id"], "content": "Moved text"}])
+                                          "path": "topics/" + item["id"], "content": "Moved text"}], expected_task_revision=runtime.status(cycle)["task_revision"])
     assert apply(runtime, cycle, move)["status"] == "applied"
     assert runtime.read(cycle, item["id"])["path"] == "knowledge/topics/" + item["id"]
 
@@ -408,7 +409,7 @@ def test_cleanup_failure_can_retry_without_touching_other_cycles(workspace):
     runtime, _ = workspace
     a = start(runtime, "a"); b = start(runtime, "b")
     tmp = runtime.tmp_write(a, "Temporary")
-    runtime.proposal_prepare(a, [], no_changes_reason="Only a temporary working note; no permanent changes.")
+    runtime.proposal_prepare(a, [], no_changes_reason="Only a temporary working note; no permanent changes.", expected_task_revision=runtime.status(a)["task_revision"])
     with patch.object(runtime, "_purge", side_effect=OSError("cleanup failed")):
         with pytest.raises(OSError): runtime.finish(a)
     assert runtime._tmp(a).exists()
@@ -464,17 +465,17 @@ def test_changed_incoming_links_conflict_before_merge_writes(workspace):
     runtime, _ = workspace
     cycle = start(runtime)
     p = runtime.proposal_prepare(cycle, [{"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "key": "a", "content": "A"}, {"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "key": "b", "content": "B"},
-        {"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "key": "n", "content": "Neighbor", "links": ["@b"]}])
+        {"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "key": "n", "content": "Neighbor", "links": ["@b"]}], expected_task_revision=runtime.status(cycle)["task_revision"])
     apply(runtime, cycle, p)
     a, b, n = [runtime.read(cycle, p["created_ids"][key]) for key in ("a", "b", "n")]
     merge = runtime.proposal_prepare(cycle, [{"description": "Verified knowledge used to exercise workspace lifecycle and proposal rules", "material_id": a["id"], "expected_revision": a["revision"], "content": "Merged"},
-        {"material_id": b["id"], "expected_revision": b["revision"], "delete": True}], {b["id"]: a["id"]})
+        {"material_id": b["id"], "expected_revision": b["revision"], "delete": True}], {b["id"]: a["id"]}, expected_task_revision=runtime.status(cycle)["task_revision"])
     other = start(runtime, "other")
     with pytest.raises(PCWError, match="reserved"):
         runtime.reserve(other, [n["id"]], "Change incoming links")
     for lease in {row["reservation_id"] for row in merge["reservations"]}:
         runtime.reservation_release(cycle, lease)
-    nav = runtime.proposal_prepare(other, [{"material_id": n["id"], "expected_revision": n["revision"], "links": [a["id"], b["id"]]}])
+    nav = runtime.proposal_prepare(other, [{"material_id": n["id"], "expected_revision": n["revision"], "links": [a["id"], b["id"]]}], expected_task_revision=runtime.status(other)["task_revision"])
     apply(runtime, other, nav)
     with pytest.raises(PCWError, match="conflict"):
         apply(runtime, cycle, merge)
@@ -502,7 +503,7 @@ def test_symlinks_cannot_redirect_cleanup_and_tmp_cannot_be_checkpointed(workspa
     cycle = start(runtime)
     outside = tmp_path / "outside"
     outside.mkdir(); (outside / "keep").write_text("keep")
-    runtime.proposal_prepare(cycle, [], no_changes_reason="No task results to retain.")
+    runtime.proposal_prepare(cycle, [], no_changes_reason="No task results to retain.", expected_task_revision=runtime.status(cycle)["task_revision"])
     (runtime._tmp(cycle) / "link").symlink_to(outside, target_is_directory=True)
     with pytest.raises(PCWError, match="Symlinks"):
         runtime.finish(cycle)
@@ -559,21 +560,21 @@ def test_proposal_typed_contract_preserves_runtime_inputs_and_heading_title(work
     change = {'key': 'typed', 'material_id': None, 'content': '# Heading title\n\nVerified fact.',
               'description': 'Reviewed subject and applicability', 'type': 'custom-kind',
               'status': None, 'links': [], 'delete': False, 'path': 'typed.md'}
-    arguments = model.model_validate({'cycle_id': cycle, 'changes': [change]}).model_dump(exclude_unset=True)
+    arguments = model.model_validate({'cycle_id': cycle, 'changes': [change], 'expected_task_revision': runtime.status(cycle)['task_revision']}).model_dump(exclude_unset=True)
     assert arguments['changes'] == [change]
     proposal = runtime.proposal_prepare(**arguments)
     reviewed, = proposal['review_changes']
     assert reviewed['title'] == 'Heading title'
     assert reviewed['path'] == 'knowledge/typed.md'
     with pytest.raises(PCWError, match='Unknown change fields'):
-        runtime.proposal_prepare(cycle, [{**change, 'title': 'Unsupported'}])
+        runtime.proposal_prepare(cycle, [{**change, 'title': 'Unsupported'}], expected_task_revision=runtime.status(cycle)['task_revision'])
     saved = apply(runtime, cycle, proposal)
     assert saved['status'] == 'applied'
     material = proposal['created_ids']['typed']
     current = runtime.read(cycle, material)
     for fields in ({'status': None}, {'delete': False}, {'delete': True}):
         update = {'material_id': material, 'expected_revision': current['revision'], **fields}
-        arguments = model.model_validate({'cycle_id': cycle, 'changes': [update]}).model_dump(exclude_unset=True)
+        arguments = model.model_validate({'cycle_id': cycle, 'changes': [update], 'expected_task_revision': runtime.status(cycle)['task_revision']}).model_dump(exclude_unset=True)
         assert arguments['changes'] == [update]
         result = runtime.proposal_prepare(**arguments)
         assert result['proposal_id']

@@ -14,7 +14,8 @@ def register(host):
     from .server import runtime, close_runtimes
     from .source import WorkspaceEligibility
 
-    register_operations(host.registry, provider_factory=host.resources.acquire)
+    register_operations(host.registry, provider_factory=host.resources.acquire,
+                        instruction_reconcile=lambda: host.execute('core.instructions_reconcile'))
     register_discovery(host)
     from .library import register as register_library
     register_library(host)

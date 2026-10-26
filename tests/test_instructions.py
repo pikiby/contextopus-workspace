@@ -110,7 +110,7 @@ def test_instructions_mode_cannot_run_work_or_apply_knowledge(workspace):
     c = r.startup("edit", purpose="instructions")["cycle_id"]
     assert r.search(c, "work")["results"] == []  # Independent reading is allowed.
     for operation in (lambda: r.tmp_write(c, "work"),
-                      lambda: r.proposal_prepare(c, [], no_changes_reason="bypass")):
+                      lambda: r.proposal_prepare(c, [], no_changes_reason="bypass", expected_task_revision=r.status(c)["task_revision"])):
         with pytest.raises(PCWError, match="only for instructions"):
             operation()
     assert not r._tmp(c).exists()  # Instructions-only invocation requires no fabricated proposal.
@@ -137,7 +137,7 @@ def test_instruction_edit_does_not_cover_work_review_or_cross_apply(workspace):
     r, _ = workspace
     c = r.startup("work")["cycle_id"]
     r.tmp_write(c, "Useful observation")
-    k = r.proposal_prepare(c, [], no_changes_reason="No changes under old rules")
+    k = r.proposal_prepare(c, [], no_changes_reason="No changes under old rules", expected_task_revision=r.status(c)["task_revision"])
     p = edit(r, c, "Updated rules")
     with pytest.raises(PCWError, match="instructions_apply"):
         r.proposal_apply(c, p["proposal_id"], p["revision"], "yes")
@@ -152,7 +152,7 @@ def test_instruction_edit_does_not_cover_work_review_or_cross_apply(workspace):
 def test_changed_instructions_block_pending_knowledge_proposal(workspace):
     r, _ = workspace
     c = r.startup("work")["cycle_id"]
-    p = r.proposal_prepare(c, [{"description": "Verified behavior used to test historical replay and policy evidence", "key": "a", "content": "fact"}])
+    p = r.proposal_prepare(c, [{"description": "Verified behavior used to test historical replay and policy evidence", "key": "a", "content": "fact"}], expected_task_revision=r.status(c)["task_revision"])
     apply(r, c, edit(r, c, "New policy"))
     with pytest.raises(PCWError, match="Instructions changed"):
         r.proposal_apply(c, p["proposal_id"], p["revision"], "yes")
@@ -208,7 +208,7 @@ def test_empty_instructions_are_a_user_choice_not_default_fallback(workspace):
 def test_started_knowledge_write_can_recover_after_rule_change_without_fake_closure_review(workspace):
     r, _ = workspace
     c = r.startup("work")["cycle_id"]
-    p = r.proposal_prepare(c, [{"description": "Verified behavior used to test historical replay and policy evidence", "key": "a", "content": "Fact already approved"}])
+    p = r.proposal_prepare(c, [{"description": "Verified behavior used to test historical replay and policy evidence", "key": "a", "content": "Fact already approved"}], expected_task_revision=r.status(c)["task_revision"])
     write = r.engine._write
     def interrupt(path, text):
         write(path, text)
